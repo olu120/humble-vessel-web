@@ -2,15 +2,18 @@ import "../../styles/globals.css";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 
-export default async function LocaleLayout({
+const SUPPORTED = new Set(["en", "lg"]);
+
+export default function LocaleLayout({
   children,
   params,
 }: {
   children: React.ReactNode;
-  // params is async in latest Next; type as Promise and await it
-  params: Promise<{ locale: "en" | "lg" }>;
+  params: { locale: string };
 }) {
-  const { locale } = await params;
+  // sanitize to our supported locales
+  const raw = params.locale;
+  const locale = SUPPORTED.has(raw) ? (raw as "en" | "lg") : "en";
 
   return (
     <html lang={locale}>
@@ -23,7 +26,6 @@ export default async function LocaleLayout({
   );
 }
 
-// Prebuild both locales (also fine to keep this in page.tsx; either is OK)
 export function generateStaticParams() {
   return [{ locale: "en" }, { locale: "lg" }];
 }

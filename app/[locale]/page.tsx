@@ -5,8 +5,12 @@ import Button from "@/components/Button";
 import { getPosts, getServices, getApprovedReviews } from "@/lib/wp";
 import { getDictionary } from "@/lib/i18n";
 
-export default async function HomePage({ params }: { params: { locale: "en" | "lg" } }) {
-  const dict = await getDictionary(params.locale);
+export default async function HomePage({
+  params,
+}: { params: { locale: string } }) {
+  const raw = params.locale;
+  const locale = raw === "lg" ? "lg" : "en";
+  const dict = await getDictionary(locale);
   const [posts, services, reviews] = await Promise.all([
     getPosts(),
     getServices(),
