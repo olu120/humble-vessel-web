@@ -1,8 +1,0 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
-/* Optional: tweak typography for better article display */
-.prose {
-  max-width: 70ch;
-}

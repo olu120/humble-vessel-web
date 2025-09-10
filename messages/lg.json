@@ -1,0 +1,10 @@
+{
+  "nav": { "about": "Ebyaffe", "volunteer": "Bafaayo", "donate": "Weeyambeko" },
+  "hero": {
+    "title": "Obujjanjabi obutuukika ate obw'ensasanya",
+    "subtitle": "Tuweereza Bukasa, Wakiso — nga tusimbibwa ku muggalo gwa bantu.",
+    "donate": "Weeyambeko",
+    "volunteer": "Bafaayo"
+  },
+  "sections": { "services": "Ebikolebwa byaffe", "stories": "Ebifaayo", "reviews": "Okulabirirwa" }
+}

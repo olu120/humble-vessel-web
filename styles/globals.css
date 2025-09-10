@@ -1,0 +1,25 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Put tokens in @layer base so they load before components/utilities */
+@layer base {
+  :root {
+    --color-bg: #ffffff;
+    --color-text: #212529;
+    --color-muted: #4b5563;
+
+    /* Branding */
+    --brand-blue: #0077B6;
+    --brand-green: #219653;
+    --brand-yellow: #E9C46A;
+    --neutral-light: #F8F9FA;
+    --neutral-dark: #212529;
+  }
+
+  html, body { height: 100%; }
+  body { color: var(--color-text); background: var(--color-bg); }
+
+  /* Helpful defaults */
+  .prose a { color: var(--brand-blue); }
+}

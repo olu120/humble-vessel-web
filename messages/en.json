@@ -1,0 +1,10 @@
+{
+  "nav": { "about": "About", "volunteer": "Volunteer", "donate": "Donate" },
+  "hero": {
+    "title": "Affordable, Accessible Healthcare",
+    "subtitle": "Serving Bukasa, Wakiso District — powered by community support and transparency.",
+    "donate": "Donate Now",
+    "volunteer": "Volunteer"
+  },
+  "sections": { "services": "Our Featured Services", "stories": "Latest Stories", "reviews": "Reviews" }
+}
