@@ -1,12 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
+export const dynamic = "force-dynamic"; // avoid prerender errors for search params
+
+import React, { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Section from "@/components/Section";
 import Button from "@/components/Button";
 
-export default function DonateSuccessPage() {
-  const sp = useSearchParams();
+function SuccessInner() {
+  const sp = useSearchParams(); // OK inside Suspense
   const ref = sp.get("ref") || "";
   const [downloading, setDownloading] = useState(false);
   const [hasPayload, setHasPayload] = useState(false);
@@ -20,18 +22,18 @@ export default function DonateSuccessPage() {
     if (!raw) return;
     setDownloading(true);
     try {
-      const payload = JSON.parse(raw);
       const res = await fetch("/api/payments/swift/pdf", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: raw, // already JSON string
       });
       if (res.ok) {
         const blob = await res.blob();
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
+        const { reference } = JSON.parse(raw);
         a.href = url;
-        a.download = `HumbleVessel_SWIFT_${payload.reference}.pdf`;
+        a.download = `HumbleVessel_SWIFT_${reference}.pdf`;
         a.click();
         URL.revokeObjectURL(url);
       }
@@ -48,7 +50,11 @@ export default function DonateSuccessPage() {
             We’ve emailed your SWIFT instructions PDF. Please include the payment reference
             exactly as shown.
           </p>
-          {ref && <p className="text-sm opacity-70">Reference: <b>{ref}</b></p>}
+          {ref && (
+            <p className="text-sm opacity-70">
+              Reference: <b>{ref}</b>
+            </p>
+          )}
 
           {hasPayload && (
             <Button onClick={reDownload} disabled={downloading}>
@@ -62,5 +68,13 @@ export default function DonateSuccessPage() {
         </div>
       </Section>
     </main>
+  );
+}
+
+export default function DonateSuccessPage() {
+  return (
+    <Suspense fallback={<div className="p-6">Loading…</div>}>
+      <SuccessInner />
+    </Suspense>
   );
 }
