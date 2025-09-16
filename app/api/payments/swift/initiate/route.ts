@@ -1,46 +1,105 @@
 import { NextResponse } from "next/server";
-import { createDonationIntent, updateDonationIntent } from "@/lib/wp-intents";
+import { createDonationIntent } from "@/lib/wp-intents";
+import { allow } from "@/lib/ratelimit";
+
 
 export async function POST(req: Request) {
   try {
-    const { amount, currency } = await req.json();
+    const { amount, currency, donorName, donorEmail } = await req.json();
     const ip = (req.headers.get("x-forwarded-for") || "").split(",")[0] || "";
+if (!allow(ip)) return NextResponse.json({ ok:false, error:"Too many requests" }, { status: 429 });
 
     const ref = `${process.env.SWIFT_REFERENCE_PREFIX || "HV-"}${Date.now()}`;
-    const instructions = `
-Bank Name: ${process.env.SWIFT_BANK_NAME || "<Your Bank>"}
-Bank Address: ${process.env.SWIFT_BANK_ADDRESS || "<Bank Address>"}
-SWIFT/BIC: ${process.env.SWIFT_SWIFT_BIC || "<SWIFT/BIC>"}
+    const sendCur = (currency || "USD").toUpperCase();
+    const recvCur = process.env.SWIFT_RECEIVE_CURRENCY || "UGX";
+    const feeUSD = Number(process.env.SWIFT_FIXED_FEE_USD || 50);
+    const feeNote = process.env.SWIFT_FEES_NOTE || "A bank fee may be deducted on receipt.";
 
-Beneficiary: ${process.env.SWIFT_BENEFICIARY_NAME || "<Beneficiary Name>"}
-Beneficiary Address: ${process.env.SWIFT_BENEFICIARY_ADDRESS || "<Beneficiary Address>"}
+    const intermediary = (process.env.SWIFT_INTERMEDIARY_BANK_NAME || process.env.SWIFT_INTERMEDIARY_SWIFT_BIC)
+      ? `
+Intermediary/Correspondent Bank:
+  Name: ${process.env.SWIFT_INTERMEDIARY_BANK_NAME || "<Name>"}
+  Address: ${process.env.SWIFT_INTERMEDIARY_BANK_ADDRESS || "<Address>"}
+  SWIFT/BIC: ${process.env.SWIFT_INTERMEDIARY_SWIFT_BIC || "<SWIFT/BIC>"}
+`.trim() : "";
+
+    const instructions = `
+Bank Transfer (SWIFT) Instructions
+
+Beneficiary:
+  Name: ${process.env.SWIFT_BENEFICIARY_NAME || "<Beneficiary Name>"}
+  Address: ${process.env.SWIFT_BENEFICIARY_ADDRESS || "<Beneficiary Address>"}
+
+Beneficiary Bank:
+  Name: ${process.env.SWIFT_BANK_NAME || "<Bank Name>"}
+  Address: ${process.env.SWIFT_BANK_ADDRESS || "<Bank Address>"}
+  SWIFT/BIC: ${process.env.SWIFT_SWIFT_BIC || "<SWIFT/BIC>"}
+
 Account Number: ${process.env.SWIFT_ACCOUNT_NUMBER || "<Account Number>"}
 
-Amount: ${currency || "USD"} ${amount}
-Payment Reference: ${ref}
+Amount to Send: ${sendCur} ${amount}
+Receiving Currency: ${recvCur} (converted by bank FX rate)
+Fixed Receiving Bank Fee: USD ${feeUSD}
 
-Please include the Payment Reference exactly as shown to help us reconcile your donation.
+Payment Reference (include exactly): ${ref}
+
+${intermediary ? intermediary + "\n" : ""}Notes: ${feeNote}
 `.trim();
 
-    // 1) Create intent (issued_instructions)
     const intent = await createDonationIntent({
       amount: Number(amount),
-      currency: currency || "USD",
+      currency: sendCur,            // send currency (donor’s)
       method: "swift",
       status: "issued_instructions",
       reference: ref,
       client_ip: ip,
+      notes: "SWIFT instructions issued",
+      // @ts-ignore meta saved in WP
+      donor_name: donorName || "",
+      // @ts-ignore
+      donor_email: donorEmail || "",
+      // @ts-ignore
+      send_currency: sendCur,
+      // @ts-ignore
+      receive_currency: recvCur,
+      // @ts-ignore
+      fixed_fee_usd: feeUSD,
+    } as any);
+
+    // Fire-and-forget email (no await)
+try {
+  const base = process.env.SITE_URL || "http://localhost:3000";
+  fetch(`${base}/api/payments/swift/email`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      donorEmail,
+      donorName,
+      instructions,
+      reference: ref,
+      amount: Number(amount),
+      currency: sendCur,
+      feeUSD,
+      receiveCurrency: recvCur,
+    }),
+  }).catch(() => {});
+} catch {}
+
+    return NextResponse.json({
+      ok: true,
+      instructions,
+      reference: ref,
+      amount: Number(amount),
+      currency: sendCur,
+      donorName: donorName || "",
+      donorEmail: donorEmail || "",
+      feeUSD,
+      receiveCurrency: recvCur,
+      intentId: intent?.id || null,
     });
 
-    // Optionally: if critical fields are missing, flag in notes
-    const missing = ["SWIFT_BANK_NAME","SWIFT_BANK_ADDRESS","SWIFT_BENEFICIARY_NAME","SWIFT_ACCOUNT_NUMBER","SWIFT_SWIFT_BIC"]
-      .filter(k => !process.env[k as keyof NodeJS.ProcessEnv]);
-    if (missing.length) {
-      await updateDonationIntent(intent.id, { notes: `Missing: ${missing.join(", ")}` });
-    }
+  } catch (e: any) {
 
-    return NextResponse.json({ ok: missing.length === 0, instructions, reference: ref });
-  } catch (e:any) {
     return NextResponse.json({ ok:false, error: e.message }, { status: 500 });
   }
 }
