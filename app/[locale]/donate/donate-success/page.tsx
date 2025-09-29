@@ -1,14 +1,16 @@
 "use client";
 
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
 import Button from "@/components/Button";
 
+// Make sure this page is not statically prerendered
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 type Method = "mm" | "swift";
 
-export default function DonateSuccessPage() {
+function SuccessInner() {
   const sp = useSearchParams();
   const [mmPayload, setMmPayload] = useState<any>(null);
   const [swiftPayload, setSwiftPayload] = useState<any>(null);
@@ -17,7 +19,6 @@ export default function DonateSuccessPage() {
   const urlMethod = (sp.get("method") as Method | null) || null;
   const refFromUrl = sp.get("ref") || "";
 
-  // Load payloads once on mount
   useEffect(() => {
     try {
       const mm = sessionStorage.getItem("hv_last_local_payload");
@@ -45,8 +46,7 @@ export default function DonateSuccessPage() {
     (method === "mm" ? mmPayload?.currency : swiftPayload?.currency) ||
     (method === "mm" ? "UGX" : "USD");
 
-  const whatsapp =
-    process.env.NEXT_PUBLIC_ORG_WHATSAPP || "+256 774 381 886";
+  const whatsapp = process.env.NEXT_PUBLIC_ORG_WHATSAPP || "+256 774 381 886";
 
   const downloadAirtelPdf = async () => {
     try {
@@ -100,20 +100,20 @@ export default function DonateSuccessPage() {
   };
 
   if (!isReady || !method) {
-    return <div className="max-w-2xl p-6 mx-auto">Loading…</div>;
+    return <div className="max-w-2xl mx-auto p-6">Loading…</div>;
   }
 
   return (
-    <main className="max-w-2xl p-6 mx-auto">
-      <h1 className="mb-4 text-2xl font-bold">Thank you for your donation</h1>
+    <main className="max-w-2xl mx-auto p-6">
+      <h1 className="text-2xl font-bold mb-4">Thank you for your donation</h1>
 
-      <div className="p-4 space-y-3 border rounded-xl bg-gray-50">
+      <div className="p-4 border rounded-xl bg-gray-50 space-y-3">
         {method === "mm" ? (
           <>
             <p className="mb-1">
               Please complete your payment using <b>Airtel Money</b>.
             </p>
-            <ul className="ml-6 space-y-1 text-sm list-disc">
+            <ul className="list-disc ml-6 space-y-1 text-sm">
               <li>Dial <b>*185#</b> on your Airtel line.</li>
               <li>Choose <b>Pay Bill / Merchant</b>.</li>
               <li>Enter Merchant Code: <b>6890724</b>.</li>
@@ -156,7 +156,7 @@ export default function DonateSuccessPage() {
           </>
         )}
 
-        <div className="pt-4 mt-4 text-xs border-t opacity-70">
+        <div className="pt-4 text-xs opacity-70 border-t mt-4">
           Need help? Contact us on WhatsApp:{" "}
           <a href={`https://wa.me/${whatsapp.replace(/\D/g, "")}`} className="underline">
             {whatsapp}
@@ -164,5 +164,13 @@ export default function DonateSuccessPage() {
         </div>
       </div>
     </main>
+  );
+}
+
+export default function Page() {
+  return (
+    <Suspense fallback={<div className="max-w-2xl mx-auto p-6">Loading…</div>}>
+      <SuccessInner />
+    </Suspense>
   );
 }
