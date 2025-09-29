@@ -3,22 +3,10 @@
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Button from "@/components/Button";
-import SuccessClient from "./SuccessClient";
-
-// Make sure this page is not statically prerendered
-export const dynamic = "force-dynamic";
-export const revalidate = 0;
-
-export const dynamic = "force-dynamic";
-export const revalidate = 0;
-
-export default function Page() {
-  return <SuccessClient />;
-}
 
 type Method = "mm" | "swift";
 
-function SuccessInner() {
+function Inner() {
   const sp = useSearchParams();
   const [mmPayload, setMmPayload] = useState<any>(null);
   const [swiftPayload, setSwiftPayload] = useState<any>(null);
@@ -175,10 +163,11 @@ function SuccessInner() {
   );
 }
 
-export default function Page() {
+export default function SuccessClient() {
+  // Wrap Inner in Suspense because it uses useSearchParams()
   return (
     <Suspense fallback={<div className="max-w-2xl mx-auto p-6">Loading…</div>}>
-      <SuccessInner />
+      <Inner />
     </Suspense>
   );
 }
