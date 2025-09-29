@@ -85,6 +85,42 @@ try {
   }).catch(() => {});
 } catch {}
 
+// after you have { donorEmail, donorName, amount, currency, reference, instructions }
+try {
+  const base = process.env.SITE_URL || "http://localhost:3000";
+
+  // Option 1: send without attachment (quick)
+  await fetch(`${base}/api/notifications/email/receipt`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      type: "swift",
+      to: donorEmail,
+      donorName,
+      amount: Number(amount),
+      currency,
+      reference: ref,
+    }),
+  });
+
+  // Option 2: send with attached PDF by calling your own /pdf route first
+  // const pdfRes = await fetch(`${base}/api/payments/swift/pdf`, { ... });
+  // const arr = await pdfRes.arrayBuffer();
+  // await fetch(`${base}/api/notifications/email/receipt`, {
+  //   method: "POST",
+  //   headers: { "Content-Type": "application/json" },
+  //   body: JSON.stringify({
+  //     type: "swift",
+  //     to: donorEmail,
+  //     donorName,
+  //     amount: Number(amount),
+  //     currency,
+  //     reference: ref,
+  //     swiftPdf: { data: Array.from(new Uint8Array(arr)) }
+  //   }),
+  // });
+} catch {}
+
     return NextResponse.json({
       ok: true,
       instructions,

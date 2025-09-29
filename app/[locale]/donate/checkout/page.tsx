@@ -37,23 +37,44 @@ function CheckoutInner(): JSX.Element {
     setLoading(true);
 
     // -------- LOCAL (UGX / Mobile Money) --------
-    if (tab === "local") {
-      if (!phone || !network) {
-        alert("Enter phone and choose network.");
-        setLoading(false);
-        return;
-      }
-      const res = await fetch("/api/payments/mobile-money/initiate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ amount, currency: "UGX", phone, network }),
-      });
-      const data = await res.json();
-      window.location.href = data?.ok
-        ? `/${locale}/donate/donate-success`
-        : `/${locale}/donate/donate-cancel`;
-      return;
-    }
+  // LOCAL (Airtel Merchant)
+if (tab === "local") {
+  const res = await fetch("/api/payments/mobile-money/initiate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      amount,
+      currency: "UGX",
+      network: "airtel",
+      merchantCode: "6890724",
+      method: "mobile_money",
+    }),
+  });
+  const data = await res.json();
+
+  if (data?.ok) {
+    try {
+      sessionStorage.setItem(
+        "hv_last_local_payload",
+        JSON.stringify({
+          method: "mobile_money",
+          network: "airtel",
+          merchantCode: "6890724",
+          amount,
+          currency: "UGX",
+          reference: data.reference,
+        })
+      );
+    } catch {}
+
+    window.location.href =
+      `/${locale}/donate/donate-success?method=mm&ref=${encodeURIComponent(data.reference || "")}`;
+  } else {
+    window.location.href = `/${locale}/donate/donate-cancel`;
+  }
+  return;
+}
+
 
     // -------- INTERNATIONAL (SWIFT) --------
     if (!donorEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(donorEmail)) {
@@ -81,19 +102,19 @@ function CheckoutInner(): JSX.Element {
     const data = await res.json();
 
     if (data?.instructions && data?.reference) {
-      try {
-        // Save payload for "Download again" on success page
-        sessionStorage.setItem(
-          "hv_last_swift_payload",
-          JSON.stringify({
-            instructions: data.instructions,
-            reference: data.reference,
-            donorName: data.donorName || donorName,
-            donorEmail: data.donorEmail || donorEmail,
-            amount: data.amount || amount,
-            currency: data.currency || sendCurrency,
-            feeUSD: data.feeUSD,
-            receiveCurrency: data.receiveCurrency || "UGX",
+  try {
+    sessionStorage.setItem(
+      "hv_last_swift_payload",
+      JSON.stringify({
+        method: "swift",
+        donorName,
+        donorEmail,
+        amount,
+        currency: "USD",
+        reference: data.reference,
+        instructions: data.instructions,
+        feeUSD: data.feeUSD,
+        receiveCurrency: data.receiveCurrency || "UGX",
           })
         );
 
@@ -118,12 +139,11 @@ function CheckoutInner(): JSX.Element {
       }
 
       // pass ref to success page (handy for support)
-      window.location.href = `/${locale}/donate/donate-success?ref=${encodeURIComponent(
-        data.reference
-      )}`;
-    } else {
-      window.location.href = `/${locale}/donate/donate-cancel`;
-    }
+       window.location.href =
+    `/${locale}/donate/donate-success?method=swift&ref=${encodeURIComponent(data.reference)}`;
+} else {
+  window.location.href = `/${locale}/donate/donate-cancel`;
+}
   };
 
   return (
@@ -152,43 +172,23 @@ function CheckoutInner(): JSX.Element {
           </div>
 
           {tab === "local" && (
-            <div className="mb-6 space-y-3">
-              <div>
-                <label className="block mb-1 text-sm">Phone number</label>
-                <input
-                  className="w-full px-4 py-2 border rounded-2xl"
-                  placeholder="2567XXXXXXXX"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                />
-              </div>
-              <div>
-                <label className="block mb-1 text-sm">Network</label>
-                <div className="flex gap-3">
-                  <button
-                    className={`px-3 py-2 rounded-2xl border ${
-                      network === "mtn"
-                        ? "border-brand-blue ring-2 ring-brand-blue/20"
-                        : ""
-                    }`}
-                    onClick={() => setNetwork("mtn")}
-                  >
-                    MTN
-                  </button>
-                  <button
-                    className={`px-3 py-2 rounded-2xl border ${
-                      network === "airtel"
-                        ? "border-brand-blue ring-2 ring-brand-blue/20"
-                        : ""
-                    }`}
-                    onClick={() => setNetwork("airtel")}
-                  >
-                    Airtel
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
+  <div className="mb-6 space-y-3">
+    <div className="px-4 py-3 border rounded-2xl bg-green-50">
+      <p className="mb-1 font-medium">Pay with Airtel (Merchant Code)</p>
+      <ul className="ml-5 space-y-1 text-sm list-disc">
+        <li>Open your phone and dial <b>*185#</b>.</li>
+        <li>Choose <b>Pay Bill / Merchant</b>.</li>
+        <li>Enter Merchant Code: <b>6890724</b>.</li>
+        <li>Enter Amount: <b>UGX {amount.toLocaleString()}</b>.</li>
+        <li>Enter <b>Payment Reference</b> (we’ll show it after you proceed).</li>
+        <li>Confirm the payment on your phone.</li>
+      </ul>
+      <p className="mt-2 text-xs opacity-70">
+        Tip: Please keep your transaction SMS/receipt for records.
+      </p>
+    </div>
+  </div>
+)}
 
           {tab === "intl" && (
             <div className="mb-6 space-y-3">
