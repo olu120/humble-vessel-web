@@ -4,60 +4,69 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { createDonationIntent } from "@/lib/wp-intents"; // your existing helper
 
-export async function POST(req: Request) {
-  try {
-    const { amount, currency, network, merchantCode } = await req.json();
-    const ip = (req.headers.get("x-forwarded-for") || "").split(",")[0] || "";
+type Body = {
+  amount: number | string;
+  currency?: string;
+  donorEmail?: string;
+  locale?: "en" | "lg";
+  // we accept but ignore overrides; we hard-set Airtel merchant in meta
+  network?: "airtel" | "mtn";
+  merchantCode?: string;
+};
 
-    if (!amount || !currency) {
-      return NextResponse.json({ ok: false, error: "Missing amount/currency" }, { status: 400 });
+function makeRef(prefix = process.env.MOBILE_REFERENCE_PREFIX || "HV-MM-") {
+  const rand = Math.random().toString(36).slice(2, 6).toUpperCase();
+  const ts = Date.now().toString().slice(-6);
+  return `${prefix}${rand}-${ts}`;
+}
+
+export async function POST(req: Request) {
+  let reference = makeRef();
+  try {
+    const { amount, currency = "UGX", donorEmail, locale = "en" } = (await req.json()) as Body;
+
+    // Basic validate amount
+    const amt = Number(amount);
+    if (!amt || Number.isNaN(amt) || amt <= 0) {
+      return NextResponse.json({ ok: false, error: "Invalid amount" }, { status: 400 });
     }
 
-    // generate a simple reference (same style you used for SWIFT)
-    const ref = `${process.env.MOBILE_REFERENCE_PREFIX || "HV-MM-"}${Date.now()}`;
+    // Client IP (best-effort)
+    const ip = (req.headers.get("x-forwarded-for") || "").split(",")[0]?.trim() || "";
 
-    // Create a pending intent; donor pays via Airtel Merchant on their phone
-    const intent = await createDonationIntent({
-      amount: Number(amount),
-      currency: String(currency || "UGX"),
-      method: "mobile_money",
-      status: "pending", // until finance confirms
-      reference: ref,
-      client_ip: ip,
-      notes: "Airtel Merchant payment initiated (offline)",
-      // @ts-ignore additional meta
-      network: String(network || "airtel"),
-      // @ts-ignore store merchant code for admin visibility
-      merchant_code: String(merchantCode || ""),
-    } as any);
+    // Try to record in WP — but *do not* fail the whole flow if WP is down.
+    try {
+      await createDonationIntent({
+        amount: amt,
+        currency: String(currency || "UGX"),
+        method: "mobile_money",
+        status: "issued_instructions", // we issued instructions PDF
+        reference,
+        client_ip: ip,
+        notes: "Airtel Merchant payment initiated (offline)",
+        // extra meta for admin:
+        // @ts-ignore
+        network: "airtel",
+        // @ts-ignore
+        merchant_code: "6890724",
+        // @ts-ignore
+        donor_email: donorEmail || "",
+        // @ts-ignore
+        send_currency: "UGX",
+        // @ts-ignore
+        receive_currency: "UGX",
+        // @ts-ignore
+        locale,
+      } as any);
+    } catch (wpErr) {
+      console.error("WP createDonationIntent failed:", wpErr);
+      // continue; we'll still return reference so UI goes to success page
+    }
 
-    return NextResponse.json({
-      ok: true,
-      intentId: intent?.id || null,
-      reference: ref,
-    });
-    // ... after you create ref and intent successfully:
-try {
-  const base = process.env.SITE_URL || "http://localhost:3000";
-  // If you collected donorEmail earlier, include it. If not, you can skip or add a small email field later.
-  if (/* you have donorEmail */ false) {
-    await fetch(`${base}/api/notifications/email/receipt`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        type: "local",
-        to: /* donorEmail */ "donor@example.com",
-        donorName: /* donorName */ undefined,
-        amount,
-        currency: "UGX",
-        reference: ref,
-        merchantCode: "6890724",
-      }),
-    });
-  }
-} catch {}
-
+    return NextResponse.json({ ok: true, reference }, { status: 200 });
   } catch (e: any) {
-    return NextResponse.json({ ok: false, error: e.message }, { status: 500 });
+    console.error("MM initiate fatal:", e?.message || e);
+    // Even if parsing failed, return a cancel signal
+    return NextResponse.json({ ok: false, error: "init_failed" }, { status: 200 });
   }
 }

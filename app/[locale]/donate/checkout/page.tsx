@@ -1,34 +1,37 @@
 "use client";
 
-import React, { Suspense, useState, type JSX } from "react";
+import React, { Suspense, useState } from "react";
 import { useSearchParams, usePathname } from "next/navigation";
 import Section from "@/components/Section";
 import Button from "@/components/Button";
 
-function CheckoutInner(): JSX.Element {
-  const sp = useSearchParams(); // Suspense-safe
+// Small helper to turn ArrayBuffer -> base64 in the browser (no Node Buffer)
+function arrayBufferToBase64(buf: ArrayBuffer): string {
+  let binary = "";
+  const bytes = new Uint8Array(buf);
+  const len = bytes.byteLength;
+  for (let i = 0; i < len; i++) binary += String.fromCharCode(bytes[i]);
+  // btoa expects binary string
+  return typeof btoa !== "undefined" ? btoa(binary) : "";
+}
+
+function CheckoutInner() {
+  const sp = useSearchParams();
   const pathname = usePathname() || "/en";
   const locale = (pathname.split("/")[1] || "en") as "en" | "lg";
 
   const tab = (sp.get("tab") as "local" | "intl") || "local";
   const amount = Number(sp.get("amount") || 0);
 
-  // Local (Mobile Money)
-  const [phone, setPhone] = useState<string>("");
-  const [network, setNetwork] = useState<"" | "mtn" | "airtel">("");
+  // Local (Airtel Merchant) — email only
+  const [donorEmailLocal, setDonorEmailLocal] = useState("");
 
   // Intl (SWIFT)
-  const [donorName, setDonorName] = useState<string>("");
-  const [donorEmail, setDonorEmail] = useState<string>("");
+  const [donorName, setDonorName] = useState("");
+  const [donorEmail, setDonorEmail] = useState("");
 
-  // Allowed send currencies (public env → client)
-  const allowedFromEnv =
-    (process.env.NEXT_PUBLIC_SWIFT_ALLOWED_SEND_CURRENCIES || "USD,EUR,GBP")
-      .split(",")
-      .map((c) => c.trim().toUpperCase())
-      .filter(Boolean);
-  const allowed = allowedFromEnv.length ? allowedFromEnv : ["USD", "EUR", "GBP"];
-  const [sendCurrency, setSendCurrency] = useState<string>(allowed[0]);
+  // Privacy consent (both flows)
+  const [consent, setConsent] = useState(false);
 
   const [loading, setLoading] = useState(false);
 
@@ -36,65 +39,119 @@ function CheckoutInner(): JSX.Element {
     if (loading) return;
     setLoading(true);
 
-    // -------- LOCAL (UGX / Mobile Money) --------
-  // LOCAL (Airtel Merchant)
-if (tab === "local") {
-  const res = await fetch("/api/payments/mobile-money/initiate", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      amount,
-      currency: "UGX",
-      network: "airtel",
-      merchantCode: "6890724",
-      method: "mobile_money",
-    }),
-  });
-  const data = await res.json();
+    // Basic consent gate (applies to both tabs)
+    if (!consent) {
+      alert(
+        locale === "lg"
+          ? "Bambi kaakasa nti okkiriza okutereka amawulire go okufuna risiti."
+          : "Please agree to the privacy statement so we can store your details for receipts."
+      );
+      setLoading(false);
+      return;
+    }
 
-  if (data?.ok) {
-    try {
-      sessionStorage.setItem(
-        "hv_last_local_payload",
-        JSON.stringify({
-          method: "mobile_money",
-          network: "airtel",
-          merchantCode: "6890724",
+    // ──────────────────────────
+    // LOCAL (Airtel Merchant)
+    // ──────────────────────────
+    if (tab === "local") {
+      // (Optional) validate email if provided
+      if (donorEmailLocal && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(donorEmailLocal)) {
+        alert(
+          locale === "lg"
+            ? "Teeka email entuufu oba leka ekifo kino nga tekijjudde."
+            : "Please enter a valid email or leave it blank."
+        );
+        setLoading(false);
+        return;
+      }
+
+      // 1) Create intent on server (keeps existing server behavior)
+      const res = await fetch("/api/payments/mobile-money/initiate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
           amount,
           currency: "UGX",
-          reference: data.reference,
-        })
-      );
-    } catch {}
+          network: "airtel", // hard-coded to Airtel Merchant flow
+          donorEmail: donorEmailLocal || undefined,
+        }),
+      });
 
-    window.location.href =
-      `/${locale}/donate/donate-success?method=mm&ref=${encodeURIComponent(data.reference || "")}`;
-  } else {
-    window.location.href = `/${locale}/donate/donate-cancel`;
-  }
-  return;
-}
+      const data = await res.json();
 
+      if (data?.reference) {
+        try {
+          // 2) Generate Airtel PDF on server
+          const resPdf = await fetch("/api/payments/mobile-money/pdf", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              merchantCode: "6890724",
+              reference: data.reference,
+              amount,
+              currency: "UGX",
+            }),
+          });
 
-    // -------- INTERNATIONAL (SWIFT) --------
+          if (resPdf.ok) {
+            const buf = await resPdf.arrayBuffer();
+            const pdfBase64 = arrayBufferToBase64(buf);
+
+            // 3) Email the PDF (if donor provided email)
+            if (donorEmailLocal) {
+              await fetch("/api/payments/mobile-money/email", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  donorEmail: donorEmailLocal,
+                  reference: data.reference,
+                  pdfBytesBase64: pdfBase64,
+                }),
+              });
+            }
+
+            // 4) Download a copy for the donor immediately
+            const blob = new Blob([buf], { type: "application/pdf" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `HumbleVessel_Airtel_${data.reference}.pdf`;
+            a.click();
+            URL.revokeObjectURL(url);
+          }
+        } catch {
+          // ignore and continue to success page
+        }
+
+        window.location.href = `/${locale}/donate/donate-success?method=mm&ref=${encodeURIComponent(
+          data.reference
+        )}`;
+        return;
+      }
+
+      window.location.href = `/${locale}/donate/donate-cancel`;
+      return;
+    }
+
+    // ──────────────────────────
+    // INTERNATIONAL (SWIFT)
+    // ──────────────────────────
     if (!donorEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(donorEmail)) {
-      alert("Please enter a valid email for your receipt/PDF.");
-      setLoading(false);
-      return;
-    }
-    if (!amount || amount < 100) {
-      alert(`International donations must be at least 100 ${sendCurrency}.`);
+      alert(
+        locale === "lg"
+          ? "Bambi teeka email entuufu okufuna PDF/risiti yo."
+          : "Please enter a valid email for your PDF/receipt."
+      );
       setLoading(false);
       return;
     }
 
-    // Create SWIFT instructions + log intent
     const res = await fetch("/api/payments/swift/initiate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         amount,
-        currency: sendCurrency, // donor-selected currency
+        currency: "USD",
         donorName,
         donorEmail,
       }),
@@ -102,31 +159,41 @@ if (tab === "local") {
     const data = await res.json();
 
     if (data?.instructions && data?.reference) {
-  try {
-    sessionStorage.setItem(
-      "hv_last_swift_payload",
-      JSON.stringify({
-        method: "swift",
-        donorName,
-        donorEmail,
-        amount,
-        currency: "USD",
-        reference: data.reference,
-        instructions: data.instructions,
-        feeUSD: data.feeUSD,
-        receiveCurrency: data.receiveCurrency || "UGX",
-          })
-        );
-
-        // Generate branded PDF (server) and download client-side
+      try {
+        // Generate SWIFT PDF (server)
         const resPdf = await fetch("/api/payments/swift/pdf", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: sessionStorage.getItem("hv_last_swift_payload")!,
+          body: JSON.stringify({
+            instructions: data.instructions,
+            reference: data.reference,
+            donorName,
+            donorEmail,
+            amount,
+            currency: "USD",
+            feeUSD: data.feeUSD,
+            receiveCurrency: "UGX",
+          }),
         });
 
         if (resPdf.ok) {
-          const blob = await resPdf.blob();
+          const buf = await resPdf.arrayBuffer();
+          const pdfBase64 = arrayBufferToBase64(buf);
+
+          // Email PDF to donor
+          await fetch("/api/payments/swift/email", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              donorEmail,
+              donorName,
+              reference: data.reference,
+              pdfBytesBase64: pdfBase64,
+            }),
+          });
+
+          // Download a copy immediately
+          const blob = new Blob([buf], { type: "application/pdf" });
           const url = URL.createObjectURL(blob);
           const a = document.createElement("a");
           a.href = url;
@@ -135,74 +202,112 @@ if (tab === "local") {
           URL.revokeObjectURL(url);
         }
       } catch {
-        // ignore; we'll still take donor to success page
+        // ignore and continue to success page
       }
 
-      // pass ref to success page (handy for support)
-       window.location.href =
-    `/${locale}/donate/donate-success?method=swift&ref=${encodeURIComponent(data.reference)}`;
-} else {
-  window.location.href = `/${locale}/donate/donate-cancel`;
-}
+      window.location.href = `/${locale}/donate/donate-success?method=swift&ref=${encodeURIComponent(
+        data.reference
+      )}`;
+    } else {
+      window.location.href = `/${locale}/donate/donate-cancel`;
+    }
   };
 
   return (
     <main>
-      <Section title="Confirm your donation">
-        <div className="max-w-xl p-6 border rounded-2xl">
-          <div className="mb-4">
-            <p className="text-sm opacity-80">Donation type</p>
+      <Section
+        title={
+          locale === "lg"
+            ? "Kakasa olw'okuwaayo ensasula"
+            : "Confirm your donation"
+        }
+      >
+        <div className="max-w-xl p-6 border rounded-2xl space-y-6">
+          {/* Type & Amount */}
+          <div>
+            <p className="text-sm opacity-80">
+              {locale === "lg" ? "Ekika ky'ensasula" : "Donation type"}
+            </p>
             <p className="text-lg font-medium">
-              {tab === "intl" ? "International" : "Local (UGX)"}
+              {tab === "intl"
+                ? locale === "lg"
+                  ? "International (USD)"
+                  : "International (USD)"
+                : locale === "lg"
+                ? "Wano mu Uganda (UGX)"
+                : "Local (UGX)"}
             </p>
           </div>
-
-          <div className="mb-6">
-            <p className="text-sm opacity-80">Amount</p>
+          <div>
+            <p className="text-sm opacity-80">
+              {locale === "lg" ? "Omuwendo" : "Amount"}
+            </p>
             <p className="text-2xl font-semibold">
               {tab === "intl"
-                ? `${sendCurrency} ${amount.toLocaleString()}`
+                ? `$${amount}`
                 : `UGX ${amount.toLocaleString()}`}
             </p>
-            {tab === "intl" && (
-              <p className="mt-1 text-xs opacity-70">
-                Minimum 100 due to the receiving bank’s USD 100 fee.
-              </p>
-            )}
           </div>
 
+          {/* LOCAL (Airtel merchant) */}
           {tab === "local" && (
-  <div className="mb-6 space-y-3">
-    <div className="px-4 py-3 border rounded-2xl bg-green-50">
-      <p className="mb-1 font-medium">Pay with Airtel (Merchant Code)</p>
-      <ul className="ml-5 space-y-1 text-sm list-disc">
-        <li>Open your phone and dial <b>*185#</b>.</li>
-        <li>Choose <b>Pay Bill / Merchant</b>.</li>
-        <li>Enter Merchant Code: <b>6890724</b>.</li>
-        <li>Enter Amount: <b>UGX {amount.toLocaleString()}</b>.</li>
-        <li>Enter <b>Payment Reference</b> (we’ll show it after you proceed).</li>
-        <li>Confirm the payment on your phone.</li>
-      </ul>
-      <p className="mt-2 text-xs opacity-70">
-        Tip: Please keep your transaction SMS/receipt for records.
-      </p>
-    </div>
-  </div>
-)}
+            <div className="space-y-3">
+              <div className="px-4 py-3 text-sm border rounded-xl bg-gray-50">
+                <p className="font-medium">
+                  Airtel Money (Merchant Code)
+                </p>
+                <p className="text-xs opacity-75 mt-1">
+                  {locale === "lg"
+                    ? "Tujjakukuwerera PDF erimu entegeka zonna n’ensingo ya kisasu (reference)."
+                    : "We’ll generate a PDF with step-by-step instructions and your payment reference."}
+                </p>
+                <p className="mt-2 text-sm">
+                  <b>Merchant Code:</b> 6890724
+                </p>
+              </div>
 
-          {tab === "intl" && (
-            <div className="mb-6 space-y-3">
               <div>
-                <label className="block mb-1 text-sm">Donor name</label>
+                <label className="block mb-1 text-sm">
+                  {locale === "lg"
+                    ? "Email (okufuna PDF ne risiti)"
+                    : "Donor email (for PDF/receipt)"}
+                </label>
+                <input
+                  type="email"
+                  className="w-full px-4 py-2 border rounded-2xl"
+                  placeholder="you@example.com"
+                  value={donorEmailLocal}
+                  onChange={(e) => setDonorEmailLocal(e.target.value)}
+                />
+                <p className="mt-1 text-xs opacity-70">
+                  {locale === "lg"
+                    ? "Tujjakuweereza Airtel instructions PDF ne risiti yo."
+                    : "We’ll email your Airtel instructions PDF and receipt."}
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* INTERNATIONAL (SWIFT) */}
+          {tab === "intl" && (
+            <div className="space-y-3">
+              <div>
+                <label className="block mb-1 text-sm">
+                  {locale === "lg"
+                    ? "Erinnya ly'omuwaayo"
+                    : "Donor name"}
+                </label>
                 <input
                   className="w-full px-4 py-2 border rounded-2xl"
-                  placeholder="Full name"
+                  placeholder={locale === "lg" ? "Erinnya eryoona" : "Full name"}
                   value={donorName}
                   onChange={(e) => setDonorName(e.target.value)}
                 />
               </div>
               <div>
-                <label className="block mb-1 text-sm">Donor email</label>
+                <label className="block mb-1 text-sm">
+                  {locale === "lg" ? "Email" : "Donor email"}
+                </label>
                 <input
                   type="email"
                   className="w-full px-4 py-2 border rounded-2xl"
@@ -212,53 +317,56 @@ if (tab === "local") {
                 />
               </div>
 
-              {/* Send-currency selector */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block mb-1 text-sm">Send currency</label>
-                  <select
-                    className="w-full px-3 py-2 border rounded-2xl"
-                    value={sendCurrency}
-                    onChange={(e) => setSendCurrency(e.target.value)}
-                  >
-                    {allowed.map((c) => (
-                      <option key={c} value={c}>
-                        {c}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              {/* Fees & conversion note */}
               <div className="px-4 py-3 text-sm border rounded-xl bg-yellow-50">
                 <p className="mb-1">
-                  <strong>Important:</strong>
+                  <strong>
+                    {locale === "lg" ? "Okulabula:" : "Important:"}
+                  </strong>
                 </p>
                 <ul className="ml-5 space-y-1 list-disc">
                   <li>
-                    You can send in your local currency (
-                    <strong>{allowed.join(", ")}</strong>).
+                    {locale === "lg"
+                      ? "Ensasula ezitwalibwa mu USD ziteekebwa mu UGX ku rate ya bbanka."
+                      : "Transfers are sent in USD but the bank credits in UGX at their FX rate."}
                   </li>
                   <li>
-                    The receiving bank <strong>credits in UGX</strong> at its FX
-                    rate.
+                    {locale === "lg"
+                      ? "Obuwumbi $50 busalibwa ku bbanka eyaniriza ensasula."
+                      : "A flat $50 receiving bank fee is deducted."}
                   </li>
                   <li>
-                    A <strong>flat USD 100</strong> receiving bank fee is
-                    deducted on arrival.
-                  </li>
-                  <li>
-                    Please include the <strong>Payment Reference</strong>{" "}
-                    exactly as shown in the PDF.
+                    {locale === "lg"
+                      ? "Teekamu Payment Reference nga bwe kiri mu PDF."
+                      : "Include the Payment Reference exactly as shown in the PDF."}
                   </li>
                 </ul>
               </div>
             </div>
           )}
 
+          {/* Privacy / consent */}
+          <label className="flex items-start gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={consent}
+              onChange={() => setConsent((v) => !v)}
+              className="mt-0.5"
+            />
+            <span>
+              {locale === "lg"
+                ? "Nkakasa nti nkiriza okutereka amawulire gange okuddiza risiti n'okukola lipooti y’ensasula."
+                : "I agree that my details may be stored to issue receipts and reconcile donations."}
+            </span>
+          </label>
+
           <Button onClick={proceed} disabled={loading}>
-            {loading ? "Processing…" : "Proceed"}
+            {loading
+              ? locale === "lg"
+                ? "Okutambuza…"
+                : "Processing…"
+              : locale === "lg"
+              ? "Genda mumaaso"
+              : "Proceed"}
           </Button>
         </div>
       </Section>
@@ -266,7 +374,7 @@ if (tab === "local") {
   );
 }
 
-export default function DonateCheckoutPage(): JSX.Element {
+export default function DonateCheckoutPage() {
   return (
     <Suspense fallback={<div className="p-6">Loading checkout…</div>}>
       <CheckoutInner />

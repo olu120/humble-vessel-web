@@ -3,11 +3,7 @@ export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
 import { wpListIntents, IntentItem } from "@/lib/wp-intents-admin";
-
-function isAuthorized(req: Request) {
-  const token = req.headers.get("x-admin-token") || "";
-  return token && (token === process.env.RECONCILE_TOKEN || token === process.env.AUDIT_TOKEN);
-}
+import { assertAdmin } from "@/lib/admin-auth";
 
 function toCsv(items: IntentItem[]) {
   const headers = [
@@ -63,16 +59,16 @@ function toCsv(items: IntentItem[]) {
 
 export async function GET(req: Request) {
   try {
-    if (!isAuthorized(req)) {
-      return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
-    }
+    // ✅ If this throws, we’ll catch and send JSON (not HTML)
+    await assertAdmin();
 
     const { searchParams } = new URL(req.url);
     const method = searchParams.get("method") as "swift" | "mobile_money" | null;
     const status = searchParams.get("status") || undefined;
     const search = searchParams.get("search") || undefined;
-    const page = Number(searchParams.get("page") || "1");
-    const perPage = Number(searchParams.get("perPage") || "200"); // allow larger pulls
+    const page = Math.max(1, Number(searchParams.get("page") || "1"));
+    // Respect WP max=100; we’ll paginate when CSV below
+    const perPage = Math.min(100, Math.max(1, Number(searchParams.get("perPage") || "50")));
     const format = searchParams.get("format"); // "csv" or undefined
 
     const { items, total, totalPages } = await wpListIntents({
@@ -84,45 +80,46 @@ export async function GET(req: Request) {
     });
 
     if (format === "csv") {
-  let all: IntentItem[] = [];
-  let pageNum = 1;
-  let lastTotalPages = 1;
+      // Pull all pages when CSV
+      let all: IntentItem[] = [];
+      let pageNum = 1;
+      let lastTotalPages = 1;
 
-  while (true) {
-    const { items, totalPages } = await wpListIntents({
-      method: (method ?? undefined) as any,
-      status,
-      search,
-      page: pageNum,
-      perPage: 100, // WordPress max
-    });
-    all = all.concat(items);
-    lastTotalPages = totalPages;
-    if (pageNum >= totalPages) break;
-    pageNum++;
-  }
+      while (true) {
+        const { items, totalPages } = await wpListIntents({
+          method: (method ?? undefined) as any,
+          status,
+          search,
+          page: pageNum,
+          perPage: 100,
+        });
+        all = all.concat(items);
+        lastTotalPages = totalPages;
+        if (pageNum >= totalPages) break;
+        pageNum++;
+      }
 
-  const csv = toCsv(all);
-  const count = all.length;
-  const pages = lastTotalPages;
+      const csv = toCsv(all);
+      const count = all.length;
+      const pages = lastTotalPages;
 
-  return new NextResponse(csv, {
-    status: 200,
-    headers: {
-      "Content-Type": "text/csv; charset=utf-8",
-      // Put the count into the filename so it's visible right away
-      "Content-Disposition": `attachment; filename="donation_intents_export_${count}.csv"`,
-      // Also include explicit headers the client can read for a toast
-      "X-Export-Count": String(count),
-      "X-Export-Pages": String(pages),
-    },
-  });
-}
-
-
+      return new NextResponse(csv, {
+        status: 200,
+        headers: {
+          "Content-Type": "text/csv; charset=utf-8",
+          "Content-Disposition": `attachment; filename="donation_intents_export_${count}.csv"`,
+          "X-Export-Count": String(count),
+          "X-Export-Pages": String(pages),
+        },
+      });
+    }
 
     return NextResponse.json({ ok: true, items, total, totalPages });
   } catch (e: any) {
-    return NextResponse.json({ ok: false, error: e.message }, { status: 500 });
+    const msg = e?.message || "Unknown error";
+    const status = e?.statusCode && Number.isInteger(e.statusCode) ? e.statusCode : 500;
+
+    // ✅ Always send JSON on errors
+    return NextResponse.json({ ok: false, error: msg }, { status });
   }
 }

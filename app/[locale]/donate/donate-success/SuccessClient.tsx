@@ -1,13 +1,59 @@
 "use client";
 
 import { Suspense, useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, usePathname } from "next/navigation";
+import Link from "next/link";
 import Button from "@/components/Button";
 
 type Method = "mm" | "swift";
 
+const dict = {
+  en: {
+    title: "Thank you for your donation",
+    mmIntro: "Please complete your payment using Airtel Money.",
+    mmSteps: [
+      "Dial *185# on your Airtel line.",
+      "Choose Pay Bill / Merchant.",
+      "Enter Merchant Code: 6890724.",
+      "Enter amount exactly as pledged.",
+      "Enter Payment Reference as provided.",
+      "Confirm and complete the payment on your phone.",
+    ],
+    downloadAirtel: "Download Airtel Instructions (PDF)",
+    swiftIntro:
+      "We’ve emailed your SWIFT instructions PDF. Please include the payment reference exactly as shown.",
+    downloadSwift: "Download SWIFT Instructions (PDF)",
+    help: "Need help? Contact us on WhatsApp:",
+    noCtx: "We couldn’t find your donation details on this page.",
+    goHome: "Go to Donate",
+  },
+  lg: {
+    title: "Webale nnyo olw’okuwaayo ensasula yo",
+    mmIntro: "Bambi maliriza ensasula nga okozesa Airtel Money.",
+    mmSteps: [
+      "Cakula *185# ku layini yo eya Airtel.",
+      "Londa Pay Bill / Merchant.",
+      "Teeka Merchant Code: 6890724.",
+      "Teeka omuwendo ng’ogusuubiza.",
+      "Teeka Payment Reference nga bwe baakuwadde.",
+      "Kakasa olwo omulimu gumalirizibwe ku ssimu yo.",
+    ],
+    downloadAirtel: "Wanula Airtel PDF (Ebiteekateeka)",
+    swiftIntro:
+      "Tukuweerezze PDF ya SWIFT mu email. Bambi teekamu Payment Reference nga bwe kiri mu PDF.",
+    downloadSwift: "Wanula SWIFT PDF",
+    help: "Oyetaaga obuyambi? Tuukirira ku WhatsApp:",
+    noCtx: "Tetusobodde kufuna ebikwata ku nsasula yo ku muko guno.",
+    goHome: "Ddayo ku Donate",
+  },
+};
+
 function Inner() {
   const sp = useSearchParams();
+  const pathname = usePathname() || "/en";
+  const locale = (pathname.split("/")[1] || "en") as "en" | "lg";
+  const t = dict[locale];
+
   const [mmPayload, setMmPayload] = useState<any>(null);
   const [swiftPayload, setSwiftPayload] = useState<any>(null);
   const [isReady, setIsReady] = useState(false);
@@ -44,6 +90,16 @@ function Inner() {
 
   const whatsapp = process.env.NEXT_PUBLIC_ORG_WHATSAPP || "+256 774 381 886";
 
+  const langHref = (targetLocale: "en" | "lg") => {
+    const parts = pathname.split("/").slice(2); // after locale
+    const base = `/${targetLocale}/${parts.join("/")}`.replace(/\/+$/, "");
+    const qs = new URLSearchParams();
+    if (method) qs.set("method", method);
+    if (reference) qs.set("ref", reference);
+    const q = qs.toString();
+    return q ? `${base}?${q}` : base;
+  };
+
   const downloadAirtelPdf = async () => {
     try {
       const res = await fetch("/api/payments/mobile-money/pdf", {
@@ -75,7 +131,7 @@ function Inner() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           instructions: payload.instructions,
-          reference: reference,
+          reference,
           donorName: payload.donorName,
           donorEmail: payload.donorEmail,
           amount: payload.amount ?? amount,
@@ -95,67 +151,78 @@ function Inner() {
     } catch {}
   };
 
-  if (!isReady || !method) {
+  if (!isReady) {
     return <div className="max-w-2xl mx-auto p-6">Loading…</div>;
+  }
+
+  // Graceful fallback if method missing
+  if (!method) {
+    return (
+      <main className="max-w-2xl mx-auto p-6">
+        <div className="flex items-center gap-3 mb-4">
+          <Link href={langHref("en")} className={locale === "en" ? "font-bold underline" : "underline"}>EN</Link>
+          <span>·</span>
+          <Link href={langHref("lg")} className={locale === "lg" ? "font-bold underline" : "underline"}>LG</Link>
+        </div>
+
+        <h1 className="text-2xl font-bold mb-3">{t.title}</h1>
+        <div className="p-4 border rounded-xl bg-yellow-50">
+          {t.noCtx}
+          <div className="mt-3">
+            <Link href={`/${locale}/donate`} className="underline">
+              {t.goHome}
+            </Link>
+          </div>
+        </div>
+      </main>
+    );
   }
 
   return (
     <main className="max-w-2xl mx-auto p-6">
-      <h1 className="text-2xl font-bold mb-4">Thank you for your donation</h1>
+      <div className="flex items-center gap-3 mb-4">
+        <Link href={langHref("en")} className={locale === "en" ? "font-bold underline" : "underline"}>EN</Link>
+        <span>·</span>
+        <Link href={langHref("lg")} className={locale === "lg" ? "font-bold underline" : "underline"}>LG</Link>
+      </div>
+
+      <h1 className="text-2xl font-bold mb-4">{t.title}</h1>
 
       <div className="p-4 border rounded-xl bg-gray-50 space-y-3">
         {method === "mm" ? (
           <>
-            <p className="mb-1">
-              Please complete your payment using <b>Airtel Money</b>.
-            </p>
+            <p className="mb-1">{t.mmIntro}</p>
             <ul className="list-disc ml-6 space-y-1 text-sm">
-              <li>Dial <b>*185#</b> on your Airtel line.</li>
-              <li>Choose <b>Pay Bill / Merchant</b>.</li>
-              <li>Enter Merchant Code: <b>6890724</b>.</li>
+              {t.mmSteps.map((s, i) => <li key={i}>{s}</li>)}
               <li>
-                Enter Amount: <b>{currency} {Number(amount || 0).toLocaleString()}</b>.
+                <b>Ref:</b> {reference || "—"} &nbsp;•&nbsp; <b>{currency}</b>{" "}
+                {Number(amount || 0).toLocaleString()}
               </li>
-              <li>
-                Enter Payment Reference: <b>{reference || "—"}</b>.
-              </li>
-              <li>Confirm and complete the payment on your phone.</li>
             </ul>
-
             <div className="pt-2">
-              <Button onClick={downloadAirtelPdf}>
-                Download Airtel Instructions (PDF)
-              </Button>
+              <Button onClick={downloadAirtelPdf}>{t.downloadAirtel}</Button>
             </div>
-
-            <p className="text-xs opacity-70">
-              Tip: Please keep your transaction SMS/receipt for your records.
-            </p>
           </>
         ) : (
           <>
-            <p className="mb-2">
-              We’ve emailed your SWIFT instructions PDF. Please include the payment
-              reference exactly as shown.
+            <p className="mb-2">{t.swiftIntro}</p>
+            <p className="text-sm">
+              <b>Ref:</b> {reference || "—"} &nbsp;•&nbsp; <b>{currency}</b>{" "}
+              {Number(amount || 0).toLocaleString()}
             </p>
-            <p className="text-sm">Reference: <b>{reference}</b></p>
-
             <div className="pt-2">
-              <Button onClick={downloadSwiftPdf}>
-                Download SWIFT Instructions (PDF)
-              </Button>
+              <Button onClick={downloadSwiftPdf}>{t.downloadSwift}</Button>
             </div>
-
-            <p className="mt-2 text-xs opacity-70">
-              Didn’t receive the email? Check your spam folder or contact us on WhatsApp.
-            </p>
           </>
         )}
 
         <div className="pt-4 text-xs opacity-70 border-t mt-4">
-          Need help? Contact us on WhatsApp:{" "}
-          <a href={`https://wa.me/${whatsapp.replace(/\D/g, "")}`} className="underline">
-            {whatsapp}
+          {t.help}{" "}
+          <a
+            href={`https://wa.me/${(process.env.NEXT_PUBLIC_ORG_WHATSAPP || "+256774381886").replace(/\D/g, "")}`}
+            className="underline"
+          >
+            {process.env.NEXT_PUBLIC_ORG_WHATSAPP || "+256 774 381 886"}
           </a>
         </div>
       </div>
@@ -164,7 +231,6 @@ function Inner() {
 }
 
 export default function SuccessClient() {
-  // Wrap Inner in Suspense because it uses useSearchParams()
   return (
     <Suspense fallback={<div className="max-w-2xl mx-auto p-6">Loading…</div>}>
       <Inner />
