@@ -4,6 +4,7 @@ const nextConfig = {
   images: {
     remotePatterns: [
       { protocol: 'https', hostname: 'cms.humblevesselfoundationandclinic.org' },
+      { protocol: "https", hostname: "images.ctfassets.net" },
     ],
   },
 };
