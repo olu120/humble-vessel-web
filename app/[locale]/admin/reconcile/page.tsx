@@ -3,6 +3,12 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import ReconcileClient from "./ReconcileClient";
 
+// app/[locale]/admin/reconcile/page.tsx
+export const robots = {
+  index: false,
+  follow: false,
+};
+
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
