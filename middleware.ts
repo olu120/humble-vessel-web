@@ -7,27 +7,24 @@ const SUPPORTED = new Set(["en", "lg"]);
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  // If user hits "/" -> send them to "/en"
+  // Redirect root → /en
   if (pathname === "/" || pathname === "") {
     const url = req.nextUrl.clone();
     url.pathname = "/en";
     return NextResponse.redirect(url);
   }
 
-  // If first segment isn’t a supported locale, rewrite to /en + original path
+  // Handle non-locale routes → prefix with /en
   const seg = pathname.split("/")[1] || "";
   if (!SUPPORTED.has(seg)) {
     const url = req.nextUrl.clone();
-    url.pathname = `/en${pathname.startsWith("/") ? pathname : `/${pathname}`}`;
+    url.pathname = `/en${pathname}`;
     return NextResponse.rewrite(url);
   }
 
   return NextResponse.next();
 }
 
-// Don’t run middleware for static assets or API routes
 export const config = {
-  matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|icon.svg|images/.*|api/.*).*)",
-  ],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|icon.svg|images/.*|api/.*).*)"],
 };

@@ -1,5 +1,5 @@
 {
-   "redirects": [
+    "redirects": [
     { "source": "/", "destination": "/en", "permanent": false }
   ],
   "headers": [
