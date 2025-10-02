@@ -1,3 +1,4 @@
+// app/[locale]/page.tsx
 import Image from "next/image";
 import Container from "@/components/Container";
 import Section from "@/components/Section";
@@ -5,12 +6,21 @@ import Button from "@/components/Button";
 import { getPosts, getServices, getApprovedReviews } from "@/lib/wp";
 import { getDictionary } from "@/lib/i18n";
 
-export default async function HomePage({
-  params,
-}: { params: { locale: string } }) {
+const orgJsonLd = {
+  "@context": "https://schema.org",
+  "@type": "NGO",
+  name: "Humble Vessel Foundation & Clinic",
+  url: "https://humblevesselfoundationandclinic.org",
+  logo: "https://humblevesselfoundationandclinic.org/icon.svg",
+  sameAs: [],
+  address: { "@type": "PostalAddress", addressCountry: "UG" },
+};
+
+export default async function HomePage({ params }: { params: { locale: string } }) {
   const raw = params.locale;
   const locale = raw === "lg" ? "lg" : "en";
   const dict = await getDictionary(locale);
+
   const [posts, services, reviews] = await Promise.all([
     getPosts(),
     getServices(),
@@ -20,9 +30,24 @@ export default async function HomePage({
 
   return (
     <main>
-      {/* HERO */}
+      {/* JSON-LD */}
+      <script
+        type="application/ld+json"
+        // eslint-disable-next-line react/no-danger
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(orgJsonLd) }}
+      />
+
+      {/* HERO — above-the-fold: use Next/Image with priority */}
       <section className="relative h-[46vh] md:h-[60vh] grid place-items-center overflow-hidden">
-        <Image src="/images/hero.png" alt="" fill priority className="object-cover" />
+        <Image
+          src="/images/hero.png"
+          alt="Humble Vessel Foundation & Clinic — community healthcare in Uganda"
+          fill
+          priority
+          // Make sure the right size is requested across breakpoints
+          sizes="(max-width: 768px) 100vw, 100vw"
+          className="object-cover"
+        />
         <div className="absolute inset-0 bg-gradient-to-b from-black/40 to-black/50" />
         <Container className="relative z-10 text-center text-white">
           <h1 className="text-3xl font-semibold md:text-5xl">{dict.hero.title}</h1>
@@ -35,14 +60,27 @@ export default async function HomePage({
         <div className="absolute bottom-0 left-0 w-full h-1 bg-brand-yellow" />
       </section>
 
-      {/* FEATURED SERVICES */}
+      {/* FEATURED SERVICES — CMS icons: keep <img> + lazy to avoid Next/Image domain issue */}
       <Section title={dict.sections.services} bg="alt">
         <ul className="grid gap-6 md:grid-cols-3">
           {featured?.map((s: any) => (
             <li key={s.id} className="p-5 bg-white rounded-2xl shadow-card">
               <div className="flex items-center gap-3 mb-2">
-                {s.acf?.icon && <img src={s.acf.icon} alt="" className="w-10 h-10 rounded" />}
-                <h3 className="text-lg font-medium" dangerouslySetInnerHTML={{ __html: s.title?.rendered }} />
+                {s.acf?.icon && (
+                  <img
+                    src={s.acf.icon}
+                    alt=""
+                    loading="lazy"
+                    decoding="async"
+                    width={40}
+                    height={40}
+                    className="w-10 h-10 rounded object-cover"
+                  />
+                )}
+                <h3
+                  className="text-lg font-medium"
+                  dangerouslySetInnerHTML={{ __html: s.title?.rendered }}
+                />
               </div>
               <p className="text-sm opacity-80">{s.acf?.summary}</p>
             </li>
@@ -51,13 +89,19 @@ export default async function HomePage({
         </ul>
       </Section>
 
-      {/* LATEST STORIES */}
+      {/* LATEST STORIES (no heavy images yet; links stay lightweight) */}
       <Section title={dict.sections.stories}>
         <ul className="grid gap-6 md:grid-cols-2">
           {posts?.map((p: any) => (
             <li key={p.id} className="p-5 bg-white rounded-2xl shadow-card">
-              <h3 className="mb-2 text-xl font-medium" dangerouslySetInnerHTML={{ __html: p.title.rendered }} />
-              <a className="inline-block mt-2 underline text-brand-blue" href={`/${params.locale}/stories/${p.slug}`}>
+              <h3
+                className="mb-2 text-xl font-medium"
+                dangerouslySetInnerHTML={{ __html: p.title.rendered }}
+              />
+              <a
+                className="inline-block mt-2 underline text-brand-blue"
+                href={`/${params.locale}/stories/${p.slug}`}
+              >
                 Read more
               </a>
             </li>
