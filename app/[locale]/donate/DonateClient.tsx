@@ -1,24 +1,26 @@
 "use client";
+
 import { useState } from "react";
 import Section from "@/components/Section";
 import Button from "@/components/Button";
 
-const presetsLocal = [10000, 20000, 50000, 100000]; // UGX examples
-const presetsIntl = [100, 150, 200, 300]; // USD
+type Cadence = "one_time" | "weekly" | "biweekly" | "monthly";
 
-export default function DonateClient({ locale }: { locale: "en" | "lg" }) {
+const presetsLocal = [10000, 20000, 50000, 100000]; // UGX examples
+const presetsIntl  = [100, 150, 200, 300];         // USD
+
+export default function DonateClient() {
   const [tab, setTab] = useState<"local" | "intl">("local");
   const [amount, setAmount] = useState<number | "">("");
+  const [cadence, setCadence] = useState<Cadence>("one_time");
   const [error, setError] = useState<string>("");
 
-  const handlePreset = (v: number) => {
-    setAmount(v);
-    setError("");
-  };
+  const handlePreset = (v: number) => { setAmount(v); setError(""); };
 
   const validateAndContinue = () => {
     setError("");
     const val = Number(amount);
+
     if (tab === "intl") {
       if (!val || val < 100) {
         setError("International donations must be at least $100.");
@@ -30,9 +32,15 @@ export default function DonateClient({ locale }: { locale: "en" | "lg" }) {
         return;
       }
     }
-    const params = new URLSearchParams({ tab, amount: String(val) });
-    const currentLocale = locale || (location.pathname.split("/")[1] as "en" | "lg") || "en";
-    window.location.href = `/${currentLocale}/donate/checkout?${params.toString()}`;
+
+    const params = new URLSearchParams({
+      tab,
+      amount: String(val),
+      cadence, // <-- pass to checkout
+    });
+
+    const locale = (location.pathname.split("/")[1] || "en");
+    window.location.href = `/${locale}/donate/checkout?${params.toString()}`;
   };
 
   const Presets = ({ values }: { values: number[] }) => (
@@ -44,6 +52,7 @@ export default function DonateClient({ locale }: { locale: "en" | "lg" }) {
             amount === v ? "border-brand-blue ring-2 ring-brand-blue/20" : "hover:border-brand-blue"
           }`}
           onClick={() => handlePreset(v)}
+          type="button"
         >
           {tab === "intl" ? `$${v}` : `UGX ${v.toLocaleString()}`}
         </button>
@@ -53,31 +62,22 @@ export default function DonateClient({ locale }: { locale: "en" | "lg" }) {
 
   return (
     <main>
-      <Section
-        title={locale === "lg" ? "Weereza obuyambi" : "Donate"}
-        subtitle={locale === "lg" ? "Londako wano mu Uganda oba International" : "Choose local or international giving"}
-      >
+      <Section title="Donate" subtitle="Choose local or international giving">
         {/* Tabs */}
         <div className="inline-flex overflow-hidden border rounded-2xl">
           <button
             className={`px-4 py-2 ${tab === "local" ? "bg-brand-blue text-white" : ""}`}
-            onClick={() => {
-              setTab("local");
-              setAmount("");
-              setError("");
-            }}
+            onClick={() => { setTab("local"); setAmount(""); setError(""); }}
+            type="button"
           >
-            {locale === "lg" ? "Wano (UGX)" : "Local (UGX)"}
+            Local (UGX)
           </button>
           <button
             className={`px-4 py-2 ${tab === "intl" ? "bg-brand-blue text-white" : ""}`}
-            onClick={() => {
-              setTab("intl");
-              setAmount("");
-              setError("");
-            }}
+            onClick={() => { setTab("intl"); setAmount(""); setError(""); }}
+            type="button"
           >
-            {locale === "lg" ? "International (USD)" : "International (USD)"}
+            International (USD)
           </button>
         </div>
 
@@ -86,9 +86,7 @@ export default function DonateClient({ locale }: { locale: "en" | "lg" }) {
 
         {/* Custom amount */}
         <div className="mt-6">
-          <label className="block mb-1 text-sm">
-            {locale === "lg" ? "Omuwendo gwo" : "Custom amount"}
-          </label>
+          <label className="block mb-1 text-sm">Custom amount</label>
           <div className="flex items-center gap-2">
             <span className="px-3 py-2 rounded-2xl bg-brand-light">
               {tab === "intl" ? "$" : "UGX"}
@@ -104,42 +102,81 @@ export default function DonateClient({ locale }: { locale: "en" | "lg" }) {
           </div>
           {tab === "intl" && (
             <p className="mt-1 text-xs opacity-70">
-              {locale === "lg"
-                ? "International donations zisaanira okuba wa waggulu wa $100."
-                : "Minimum $100 applies to international donations."}
+              Minimum $100 applies to international donations.
             </p>
           )}
           {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
         </div>
 
+        {/* Recurring cadence */}
+        <div className="mt-6">
+          <label className="block mb-2 text-sm font-medium">Donation frequency</label>
+          <div className="grid gap-2 sm:grid-cols-2 md:grid-cols-4">
+            <label className="flex items-center gap-2 rounded-2xl border px-4 py-3 cursor-pointer">
+              <input
+                type="radio"
+                name="cadence"
+                value="one_time"
+                checked={cadence === "one_time"}
+                onChange={() => setCadence("one_time")}
+              />
+              <span>One-time</span>
+            </label>
+            <label className="flex items-center gap-2 rounded-2xl border px-4 py-3 cursor-pointer">
+              <input
+                type="radio"
+                name="cadence"
+                value="weekly"
+                checked={cadence === "weekly"}
+                onChange={() => setCadence("weekly")}
+              />
+              <span>Weekly</span>
+            </label>
+            <label className="flex items-center gap-2 rounded-2xl border px-4 py-3 cursor-pointer">
+              <input
+                type="radio"
+                name="cadence"
+                value="biweekly"
+                checked={cadence === "biweekly"}
+                onChange={() => setCadence("biweekly")}
+              />
+              <span>Biweekly</span>
+            </label>
+            <label className="flex items-center gap-2 rounded-2xl border px-4 py-3 cursor-pointer">
+              <input
+                type="radio"
+                name="cadence"
+                value="monthly"
+                checked={cadence === "monthly"}
+                onChange={() => setCadence("monthly")}
+              />
+              <span>Monthly</span>
+            </label>
+          </div>
+          <p className="mt-2 text-xs opacity-70">
+            We’ll record your preference in our system. Payments are not auto-debited yet — a team member
+            may contact you to help set up a standing order or follow-up.
+          </p>
+        </div>
+
         {/* Continue */}
         <div className="mt-6">
-          <Button onClick={validateAndContinue}>
-            {locale === "lg" ? "Weyongereyo" : "Continue"}
-          </Button>
+          <Button onClick={validateAndContinue}>Continue</Button>
         </div>
 
         {/* FAQ (wireframe) */}
         <div className="mt-10">
-          <h3 className="mb-3 text-lg font-semibold">{locale === "lg" ? "Ebibuuzo ebisinga" : "FAQs"}</h3>
+          <h3 className="mb-3 text-lg font-semibold">FAQs</h3>
           <details className="p-4 mb-2 border rounded-2xl">
-            <summary className="font-medium cursor-pointer">
-              {locale === "lg" ? "Ensasula zikoze bwa ntya?" : "How are donations used?"}
-            </summary>
+            <summary className="font-medium cursor-pointer">How are donations used?</summary>
             <p className="mt-2 text-sm opacity-80">
-              {locale === "lg"
-                ? "Ensasula ziyamba ku bikolwa by’eddwaliro, eddagala, n’obutongole obulabirira abantu."
-                : "Funds support clinic operations, medicines, outreach, and community programs."}
+              Funds support clinic operations, medicines, outreach, and community programs.
             </p>
           </details>
           <details className="p-4 border rounded-2xl">
-            <summary className="font-medium cursor-pointer">
-              {locale === "lg" ? "Nnaweebwa risiti?" : "Will I receive a receipt?"}
-            </summary>
+            <summary className="font-medium cursor-pointer">Will I receive a receipt?</summary>
             <p className="mt-2 text-sm opacity-80">
-              {locale === "lg"
-                ? "Yee—olifuna email risiti oluvannyuma lw’okusasula (guno gujja mu Phase 3)."
-                : "Yes—an email receipt is issued after payment (added in Phase 3)."}
+              Yes — an email receipt is issued after payment (added in Phase 3).
             </p>
           </details>
         </div>

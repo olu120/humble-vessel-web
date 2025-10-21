@@ -6,6 +6,9 @@ import Button from "@/components/Button";
 import { getPosts, getServices, getApprovedReviews } from "@/lib/wp";
 import { getDictionary } from "@/lib/i18n";
 
+// NEW: motion hero
+import HeroMotion from "@/components/HeroMotion";
+
 const orgJsonLd = {
   "@context": "https://schema.org",
   "@type": "NGO",
@@ -13,20 +16,74 @@ const orgJsonLd = {
   url: "https://humblevesselfoundationandclinic.org",
   logo: "https://humblevesselfoundationandclinic.org/icon.svg",
   sameAs: [],
-  address: { "@type": "PostalAddress", addressCountry: "UG" },
+  address: {
+    "@type": "PostalAddress",
+    addressCountry: "UG",
+  },
 };
 
-export default async function HomePage({ params }: { params: { locale: string } }) {
+export default async function HomePage({
+  params,
+}: { params: { locale: string } }) {
   const raw = params.locale;
   const locale = raw === "lg" ? "lg" : "en";
-  const dict = await getDictionary(locale);
 
+  const dict = await getDictionary(locale);
   const [posts, services, reviews] = await Promise.all([
     getPosts(),
     getServices(),
     getApprovedReviews(),
   ]);
   const featured = services?.filter((s: any) => s?.acf?.is_featured);
+
+  // Slides for the motion hero — use local files for best perf.
+  // Put these under /public/images/ (hero-1.jpg, hero-2.jpg, hero-3.jpg).
+  const slides = [
+    {
+      img: "/images/hero-1.jpg",
+      title:
+        locale === "lg"
+          ? "Obuweereza obw’obulamu obwesigika, obwekikadde ku bantu"
+          : "Trustworthy healthcare, rooted in community",
+      subtitle:
+        locale === "lg"
+          ? "Tuzimba obulamu n’obwenkanya mu Mityana n’awalala."
+          : "We’re building health and justice across Mityana and beyond.",
+      ctas: [
+        { label: dict.hero.donate, href: `/${params.locale}/donate` },
+        { label: dict.hero.volunteer, href: `/${params.locale}/volunteer`, variant: "secondary" as const },
+      ],
+      focal: { x: 0.5, y: 0.4 },
+    },
+    {
+      img: "/images/hero-2.jpg",
+      title:
+        locale === "lg"
+          ? "Okutuuka eri bonna: mu kabuga, ewaabwe, mu masomero"
+          : "Care that reaches everyone: towns, homes, schools",
+      subtitle:
+        locale === "lg"
+          ? "Ebikozesebwa eby’omulembe n’ettutumu ly’abasawo baffe."
+          : "Modern tools and a caring clinical team.",
+      ctas: [
+        { label: locale === "lg" ? "Laba ebyo bye tukola" : "See our services", href: `/${params.locale}/#services`, variant: "secondary" as const },
+      ],
+      focal: { x: 0.55, y: 0.35 },
+    },
+    {
+      img: "/images/hero-3.jpg",
+      title:
+        locale === "lg"
+          ? "Okuwa abazuukufu essuubi n’obuwanguzi"
+          : "Restoring hope and restoring lives",
+      subtitle:
+        locale === "lg"
+          ? "Buli ssente entono etwala omusono mungi."
+          : "Every contribution counts.",
+      ctas: [{ label: locale === "lg" ? "Guza obulamu" : "Give now", href: `/${params.locale}/donate` }],
+      focal: { x: 0.5, y: 0.5 },
+    },
+  ];
 
   return (
     <main>
@@ -37,36 +94,17 @@ export default async function HomePage({ params }: { params: { locale: string } 
         dangerouslySetInnerHTML={{ __html: JSON.stringify(orgJsonLd) }}
       />
 
-      {/* HERO — above-the-fold: use Next/Image with priority */}
-      <section className="relative h-[46vh] md:h-[60vh] grid place-items-center overflow-hidden">
-        <Image
-          src="/images/hero.png"
-          alt="Humble Vessel Foundation & Clinic — community healthcare in Uganda"
-          fill
-          priority
-          // Make sure the right size is requested across breakpoints
-          sizes="(max-width: 768px) 100vw, 100vw"
-          className="object-cover"
-        />
-        <div className="absolute inset-0 bg-gradient-to-b from-black/40 to-black/50" />
-        <Container className="relative z-10 text-center text-white">
-          <h1 className="text-3xl font-semibold md:text-5xl">{dict.hero.title}</h1>
-          <p className="max-w-2xl mx-auto mt-3 opacity-90">{dict.hero.subtitle}</p>
-          <div className="flex items-center justify-center gap-3 mt-6">
-            <a href={`/${params.locale}/donate`}><Button>{dict.hero.donate}</Button></a>
-            <a href={`/${params.locale}/volunteer`}><Button variant="secondary">{dict.hero.volunteer}</Button></a>
-          </div>
-        </Container>
-        <div className="absolute bottom-0 left-0 w-full h-1 bg-brand-yellow" />
-      </section>
+      {/* NEW: Motion hero with slides */}
+      <HeroMotion slides={slides} locale={locale} />
 
-      {/* FEATURED SERVICES — CMS icons: keep <img> + lazy to avoid Next/Image domain issue */}
-      <Section title={dict.sections.services} bg="alt">
+      {/* FEATURED SERVICES — anchor for hero CTA */}
+      <Section id="services" title={dict.sections.services} bg="alt">
         <ul className="grid gap-6 md:grid-cols-3">
           {featured?.map((s: any) => (
             <li key={s.id} className="p-5 bg-white rounded-2xl shadow-card">
               <div className="flex items-center gap-3 mb-2">
                 {s.acf?.icon && (
+                  // Keep <img> for now to avoid remote domain config issues.
                   <img
                     src={s.acf.icon}
                     alt=""
@@ -89,7 +127,7 @@ export default async function HomePage({ params }: { params: { locale: string } 
         </ul>
       </Section>
 
-      {/* LATEST STORIES (no heavy images yet; links stay lightweight) */}
+      {/* LATEST STORIES */}
       <Section title={dict.sections.stories}>
         <ul className="grid gap-6 md:grid-cols-2">
           {posts?.map((p: any) => (

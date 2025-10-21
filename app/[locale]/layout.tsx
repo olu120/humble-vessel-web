@@ -4,6 +4,8 @@ import "../../styles/globals.css";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import React from "react";
+import WhatsAppButton from "@/components/WhatsAppButton";
+import ChatWidget from "@/components/ChatWidget";
 
 const SITE = "https://humblevesselfoundationandclinic.org";
 const SUPPORTED = new Set(["en", "lg"]);
@@ -78,6 +80,9 @@ export default async function LocaleLayout({ children, params }: LocaleLayoutPro
         <Header locale={locale} />
         {children}
         <Footer />
+ {/* WhatsApp floating button (offset above Tawk bubble); move to left if you prefer */}
+        <WhatsAppButton position="right" bottomOffset={104} locale={locale} />
+        <ChatWidget />
       </body>
     </html>
   );

@@ -17,6 +17,12 @@
     --neutral-dark: #212529;
   }
 
+  .whatsapp-fab {
+  position: fixed;
+  left: 16px;
+  bottom: 16px;
+  z-index: 9999;
+}
   html, body { height: 100%; }
   body { color: var(--color-text); background: var(--color-bg); }
 

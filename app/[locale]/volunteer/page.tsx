@@ -1,47 +1,96 @@
-// NO "use client" here
-import type { Metadata } from "next";
-import VolunteerClient from "./VolunteerClient";
+"use client";
 
-const SITE = "https://humblevesselfoundationandclinic.org";
-const OG = "/og-volunteer.jpg"; // place a nice image in /public
+import { useState } from "react";
+import Section from "@/components/Section";
+import Button from "@/components/Button";
 
-export async function generateMetadata(
-  { params }: { params: { locale: "en" | "lg" } }
-): Promise<Metadata> {
-  const { locale } = params;
-  const t =
-    locale === "lg"
-      ? {
-          title: "Weyambise mu nteekateeka | Humble Vessel Foundation & Clinic",
-          desc:
-            "Weyongera ku buli kya mugaso—yambako mu by’obulamu n’obwenkanya mu Uganda.",
-        }
-      : {
-          title: "Volunteer | Humble Vessel Foundation & Clinic",
-          desc:
-            "Join our mission and volunteer to support healthcare and justice in Uganda.",
-        };
+export default function VolunteerPage() {
+  const [first, setFirst] = useState("");
+  const [last, setLast] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [interest, setInterest] = useState("");
+  const [message, setMessage] = useState("");
+  const [ok, setOk] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
-  return {
-    title: t.title,
-    description: t.desc,
-    openGraph: {
-      type: "website",
-      url: `${SITE}/${locale}/volunteer`,
-      siteName: "Humble Vessel Foundation & Clinic",
-      title: t.title,
-      description: t.desc,
-      images: [{ url: OG, width: 1200, height: 630, alt: t.title }],
-    },
-    twitter: {
-      card: "summary_large_image",
-      title: t.title,
-      description: t.desc,
-      images: [OG],
-    },
-  };
-}
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setErr(null);
+    if (!first || !last || !email) {
+      setErr("Please fill in first name, last name and email.");
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await fetch("/api/volunteer/apply", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ first, last, email, phone, interest, message }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data?.ok) throw new Error(data?.error || "Failed");
 
-export default function Page({ params }: { params: { locale: "en" | "lg" } }) {
-  return <VolunteerClient locale={params.locale} />;
+      setOk(true);
+      setFirst(""); setLast(""); setEmail(""); setPhone(""); setInterest(""); setMessage("");
+    } catch (e: any) {
+      setErr(e?.message || "Something went wrong.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <main>
+      <Section title="Volunteer" subtitle="Join our mission to deliver trusted, community-centered healthcare.">
+        {ok ? (
+          <div className="p-4 border rounded-2xl bg-green-50">
+            <p className="font-medium">Thank you! ✅</p>
+            <p className="text-sm opacity-80">We’ve received your application and emailed you a confirmation.</p>
+          </div>
+        ) : (
+          <form onSubmit={submit} className="max-w-xl space-y-4">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label className="block mb-1 text-sm">First name</label>
+                <input className="w-full px-4 py-2 border rounded-2xl" value={first} onChange={e=>setFirst(e.target.value)} />
+              </div>
+              <div>
+                <label className="block mb-1 text-sm">Last name</label>
+                <input className="w-full px-4 py-2 border rounded-2xl" value={last} onChange={e=>setLast(e.target.value)} />
+              </div>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label className="block mb-1 text-sm">Email</label>
+                <input type="email" className="w-full px-4 py-2 border rounded-2xl" value={email} onChange={e=>setEmail(e.target.value)} />
+              </div>
+              <div>
+                <label className="block mb-1 text-sm">Phone (optional)</label>
+                <input className="w-full px-4 py-2 border rounded-2xl" value={phone} onChange={e=>setPhone(e.target.value)} />
+              </div>
+            </div>
+
+            <div>
+              <label className="block mb-1 text-sm">Interest area</label>
+              <input className="w-full px-4 py-2 border rounded-2xl" placeholder="Clinical support, outreach, admin…" value={interest} onChange={e=>setInterest(e.target.value)} />
+            </div>
+
+            <div>
+              <label className="block mb-1 text-sm">Message (optional)</label>
+              <textarea className="w-full px-4 py-2 border rounded-2xl min-h-[100px]" value={message} onChange={e=>setMessage(e.target.value)} />
+            </div>
+
+            {err && <p className="text-sm text-red-600">{err}</p>}
+
+            <Button type="submit" disabled={loading}>
+              {loading ? "Submitting…" : "Submit application"}
+            </Button>
+          </form>
+        )}
+      </Section>
+    </main>
+  );
 }
