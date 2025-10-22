@@ -29,3 +29,25 @@
   /* Helpful defaults */
   .prose a { color: var(--brand-blue); }
 }
+
+/* ---- Reveal utilities (respect reduced motion) ---- */
+@media (prefers-reduced-motion: no-preference) {
+  .reveal {
+    opacity: 0;
+    transform: translateY(12px);
+    transition: opacity .5s ease, transform .5s ease;
+    will-change: opacity, transform;
+  }
+  .reveal[data-reveal-in="true"] {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* slightly snappier card hover */
+.card-smooth {
+  transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease;
+}
+.card-smooth:hover {
+  transform: translateY(-1px);
+}
