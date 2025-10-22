@@ -239,7 +239,9 @@ const storyCards = (posts || []).map((p: any) => ({
       <ImpactStrip stats={stats} />
 
       {/* FEATURED PROGRAMS */}
-      <FeaturedPrograms id="services" items={programs} sectionTitle={dict.sections.services} />
+      <Section id="services">
+  <FeaturedPrograms items={programs} sectionTitle={dict.sections.services} />
+</Section>
       {/* See all services → */}
       <div className="mt-4 -mb-4 text-center">
         <a className="inline-flex items-center gap-1 text-sm font-medium text-brand-blue hover:underline"

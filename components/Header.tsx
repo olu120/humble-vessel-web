@@ -62,7 +62,7 @@ export default function Header({ locale }: { locale: "en" | "lg" }) {
       {/* Mobile Menu */}
       {open && (
         <div ref={panelRef} className="md:hidden border-t bg-white">
-          <Container className="flex flex-col py-3 space-y-2">
+          <Container size="wide" className="flex items-center justify-between h-16">
             <Link href={`/${locale}`} onClick={() => setOpen(false)}>{t.home}</Link>
             <Link href={`/${locale}/about`} onClick={() => setOpen(false)}>{t.about}</Link>
             <Link href={`/${locale}/volunteer`} onClick={() => setOpen(false)}>{t.volunteer}</Link>

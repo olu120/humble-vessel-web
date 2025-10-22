@@ -6,7 +6,7 @@ export default function Footer({ locale = "en" }: { locale?: "en" | "lg" }) {
   const base = `/${locale}`;
   return (
     <footer className="mt-16 text-white bg-brand-dark">
-      <Container className="grid gap-8 py-12 sm:grid-cols-2 lg:grid-cols-4">
+      <Container size="wide" className="grid gap-8 py-12 md:grid-cols-4">
         <div className="lg:col-span-2">
           <h3 className="text-lg font-semibold">
             Humble Vessel Foundation &amp; Clinic
@@ -60,7 +60,7 @@ export default function Footer({ locale = "en" }: { locale?: "en" | "lg" }) {
       </Container>
 
       <div className="bg-black/20">
-        <Container className="flex flex-col sm:flex-row items-center justify-between gap-3 py-4 text-sm opacity-80">
+        <Container size="wide" className="flex items-center justify-between py-4 text-sm opacity-80">
           <span>© {new Date().getFullYear()} Humble Vessel</span>
           <span>EN • LG</span>
         </Container>

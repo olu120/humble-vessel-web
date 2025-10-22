@@ -84,18 +84,18 @@ export default function HeroMotion({
       ))}
 
       {/* Copy */}
-      <div className="relative z-10 mx-auto max-w-5xl px-4 sm:px-6 md:px-8 h-full grid place-items-center text-center text-white">
-        <div className="translate-y-0 md:translate-y-[-4%]">
-          <h1 className="text-2xl sm:text-3xl md:text-5xl font-semibold leading-tight md:leading-tight">
+      <div className="absolute inset-0 flex items-center justify-center">
+        <div className="relative z-10 mx-auto max-w-4xl px-4 sm:px-6 lg:px-8 text-center">
+          <h1 className="text-3xl md:text-5xl font-semibold leading-tight md:leading-tight">
             {active.title}
           </h1>
           {active.subtitle && (
-            <p className="mt-2 md:mt-3 max-w-2xl text-sm md:text-base opacity-90">
+            <p className="mt-3 md:mt-4 text-base md:text-lg opacity-90">
               {active.subtitle}
             </p>
           )}
           {!!active.ctas?.length && (
-            <div className="flex items-center justify-center gap-3 mt-6">
+            <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
               {active.ctas.map((c, i) =>
                 c.variant === "secondary" ? (
                   <Link key={i} href={c.href}>
