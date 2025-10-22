@@ -85,12 +85,13 @@ export default function HeroMotion({
 
       {/* Copy */}
       <div className="absolute inset-0 flex items-center justify-center">
-        <div className="relative z-10 mx-auto max-w-4xl px-4 sm:px-6 lg:px-8 text-center">
-          <h1 className="text-3xl md:text-5xl font-semibold leading-tight md:leading-tight">
+        <div className="absolute inset-0 bg-black/50" />
+        <div className="relative z-10 mx-auto max-w-4xl px-4 sm:px-6 lg:px-8 text-center text-white">
+          <h1 className="text-3xl md:text-5xl font-semibold leading-tight md:leading-tight drop-shadow-lg">
             {active.title}
           </h1>
           {active.subtitle && (
-            <p className="mt-3 md:mt-4 text-base md:text-lg opacity-90">
+            <p className="mt-3 md:mt-4 text-base md:text-lg opacity-90 drop-shadow">
               {active.subtitle}
             </p>
           )}
