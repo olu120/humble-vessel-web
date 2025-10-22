@@ -5,6 +5,8 @@ import Section from "@/components/Section";
 import Button from "@/components/Button";
 import { getPosts, getServices, getApprovedReviews } from "@/lib/wp";
 import { getDictionary } from "@/lib/i18n";
+import ImpactStrip from "@/components/ImpactStrip";
+import PartnersStrip from "@/components/PartnersStrip";
 
 // NEW: motion hero
 import HeroMotion from "@/components/HeroMotion";
@@ -163,6 +165,8 @@ export default async function HomePage({
           {!reviews?.length && <p className="opacity-70">No reviews yet.</p>}
         </ul>
       </Section>
+      <ImpactStrip />
+      <PartnersStrip />
     </main>
   );
 }
