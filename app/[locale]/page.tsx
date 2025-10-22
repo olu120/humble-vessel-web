@@ -47,6 +47,13 @@ function getPostImage(p: any): string | null {
   return null;
 }
 
+type StoryCard = {
+  id: number | string;
+  slug: string;
+  titleHtml: string;
+  img: string | null;
+  excerpt: string;
+};
 
 const orgJsonLd = {
   "@context": "https://schema.org",
@@ -207,18 +214,16 @@ function extractPostImage(p: any): string | null {
 
 
 // Build a simple list for the UI
-const storyCards = (posts || []).map((p: any) => ({
+const storyCards: StoryCard[] = (posts || []).map((p: any) => ({
   id: p.id,
   slug: p.slug,
   titleHtml: p.title?.rendered || "",
   img: extractPostImage(p),
-  // tiny excerpt: strip tags and trim
-  excerpt:
-    (p.excerpt?.rendered || p.content?.rendered || "")
-      .replace(/<[^>]+>/g, "")
-      .replace(/\s+/g, " ")
-      .trim()
-      .slice(0, 180),
+  excerpt: (p.excerpt?.rendered || p.content?.rendered || "")
+    .replace(/<[^>]+>/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 180),
 }));
 
 
