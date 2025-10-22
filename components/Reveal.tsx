@@ -1,51 +1,65 @@
 "use client";
 
-import React from "react";
+import React, { useEffect, useRef, useState } from "react";
+import clsx from "clsx";
+
+type RevealProps = {
+  /** Which element/component to render as */
+  as?: React.ElementType;
+  /** Delay in ms before animating once intersected */
+  delay?: number;
+  /** Initial Y offset in px */
+  y?: number;
+  className?: string;
+  children: React.ReactNode;
+};
 
 export default function Reveal({
-  as: As = "div",
+  as = "div",
+  delay = 0,
+  y = 12,
+  className,
   children,
-  className = "",
-  threshold = 0.12,
-  rootMargin = "0px 0px -10% 0px",
-}: {
-  as?: any;
-  children: React.ReactNode;
-  className?: string;
-  threshold?: number;
-  rootMargin?: string;
-}) {
-  const ref = React.useRef<HTMLElement | null>(null);
-  const [inView, setInView] = React.useState(false);
+}: RevealProps) {
+  const ref = useRef<HTMLElement | null>(null);
+  const [shown, setShown] = useState(false);
 
-  React.useEffect(() => {
-    if (!ref.current) return;
-    // Respect reduced motion: just show
-    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
-    if (media.matches) {
-      setInView(true);
-      return;
-    }
-    const obs = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          setInView(true);
-          obs.disconnect();
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+
+    const io = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) {
+          if (e.isIntersecting) {
+            const t = window.setTimeout(() => setShown(true), delay);
+            io.unobserve(el);
+            return () => window.clearTimeout(t);
+          }
         }
       },
-      { threshold, rootMargin }
+      { threshold: 0.12 }
     );
-    obs.observe(ref.current);
-    return () => obs.disconnect();
-  }, [threshold, rootMargin]);
 
-  return (
-    <As
-      ref={ref as any}
-      className={`reveal ${className}`}
-      data-reveal-in={inView ? "true" : "false"}
-    >
-      {children}
-    </As>
+    io.observe(el);
+    return () => io.disconnect();
+  }, [delay]);
+
+  // Build props and render without JSX to avoid the <Tag/> typing pitfall
+  const Comp = as;
+  const style = shown ? undefined : ({ transform: `translateY(${y}px)` } as React.CSSProperties);
+
+  return React.createElement(
+    Comp,
+    {
+      ref: ref as any,
+      className: clsx(
+        "transition-all duration-700 ease-out will-change-transform",
+        shown ? "opacity-100 translate-y-0" : "opacity-0",
+        className
+      ),
+      style,
+    },
+    children
   );
 }
