@@ -17,9 +17,45 @@
     --neutral-dark: #212529;
   }
 
+  .whatsapp-fab {
+  position: fixed;
+  left: 16px;
+  bottom: 16px;
+  z-index: 9999;
+}
   html, body { height: 100%; }
   body { color: var(--color-text); background: var(--color-bg); }
 
   /* Helpful defaults */
   .prose a { color: var(--brand-blue); }
+}
+
+/* ---- Reveal utilities (respect reduced motion) ---- */
+@media (prefers-reduced-motion: no-preference) {
+  .reveal {
+    opacity: 0;
+    transform: translateY(12px);
+    transition: opacity .5s ease, transform .5s ease;
+    will-change: opacity, transform;
+  }
+  .reveal[data-reveal-in="true"] {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* slightly snappier card hover */
+.card-smooth {
+  transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease;
+}
+.card-smooth:hover {
+  transform: translateY(-1px);
+}
+
+/* Gentle type ramp on larger screens */
+@media (min-width: 1024px) {
+  html { font-size: 17px; } /* Tailwind rem-based scale nudges up a bit */
+}
+@media (min-width: 1280px) {
+  html { font-size: 18px; }
 }

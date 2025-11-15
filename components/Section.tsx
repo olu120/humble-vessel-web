@@ -1,22 +1,35 @@
+import Container from "@/components/Container";
+import clsx from "clsx";
 type Props = {
+  id?: string;
   title?: string;
   subtitle?: string;
   children: React.ReactNode;
-  bg?: "default" | "alt"; // alt uses Neutral Light per refinement plan
-  id?: string;
+  bg?: "base" | "alt";
+  className?: string;
+  containerSize?: "normal" | "wide" | "full"; // NEW
 };
-export default function Section({ title, subtitle, children, bg = "default", id }: Props) {
+
+export default function Section({
+  id,
+  title,
+  subtitle,
+  children,
+  bg = "base",
+  className = "",
+  containerSize = "normal", // NEW
+}: Props) {
   return (
-    <section id={id} className={`${bg === "alt" ? "bg-brand-light/60" : "bg-white"} py-12 md:py-16`}>
-      <div className="w-full max-w-6xl px-4 mx-auto md:px-6">
-        {(title || subtitle) && (
-          <header className="mb-6">
-            {title && <h2 className="text-2xl font-semibold md:text-3xl">{title}</h2>}
+    <section id={id} className={clsx(bg === "alt" && "bg-brand-light/30", className)}>
+      <Container size={containerSize} className="py-10 md:py-14">
+        {title && (
+          <header className="mb-6 md:mb-8">
+            <h2 className="text-2xl md:text-3xl font-semibold">{title}</h2>
             {subtitle && <p className="mt-1 text-sm md:text-base opacity-80">{subtitle}</p>}
           </header>
         )}
         {children}
-      </div>
+      </Container>
     </section>
   );
 }
