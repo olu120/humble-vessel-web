@@ -247,9 +247,15 @@ export default function VolunteerPage() {
             </div>
           )}
 
-          <Button type="submit" disabled={loading}>
-            {loading ? "Submitting…" : "Submit application"}
-          </Button>
+          <Button
+  type="button"
+  onClick={() => {
+    window.location.href =
+      "https://cms.humblevesselfoundationandclinic.org/volunteer-application/";
+  }}
+>
+  Start application
+</Button>
         </form>
       </Section>
     </main>
