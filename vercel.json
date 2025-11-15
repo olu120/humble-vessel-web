@@ -1,4 +1,7 @@
 {
+    "redirects": [
+    { "source": "/", "destination": "/en", "permanent": false }
+  ],
   "headers": [
     {
       "source": "/(.*)\\.(ico|jpg|jpeg|png|webp|avif|gif|svg|css|js|woff2)",
@@ -15,4 +18,8 @@
       ]
     }
   ]
+  
 }
+
+ 
+

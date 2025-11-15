@@ -2,71 +2,65 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
-import { createDonationIntent } from "@/lib/wp-intents"; // your existing helper
+import { createDonationIntent } from "@/lib/wp-intents";
 
-type Body = {
-  amount: number | string;
-  currency?: string;
-  donorEmail?: string;
-  locale?: "en" | "lg";
-  // we accept but ignore overrides; we hard-set Airtel merchant in meta
-  network?: "airtel" | "mtn";
-  merchantCode?: string;
-};
-
-function makeRef(prefix = process.env.MOBILE_REFERENCE_PREFIX || "HV-MM-") {
-  const rand = Math.random().toString(36).slice(2, 6).toUpperCase();
-  const ts = Date.now().toString().slice(-6);
-  return `${prefix}${rand}-${ts}`;
-}
+type Cadence = "one_time" | "weekly" | "biweekly" | "monthly";
 
 export async function POST(req: Request) {
-  let reference = makeRef();
   try {
-    const { amount, currency = "UGX", donorEmail, locale = "en" } = (await req.json()) as Body;
+    const body = await req.json() as {
+      amount?: number | string;
+      currency?: string;
+      phone?: string;
+      network?: "mtn" | "airtel";
+      donorEmail?: string;
+      cadence?: Cadence; // <-- new
+    };
 
-    // Basic validate amount
-    const amt = Number(amount);
-    if (!amt || Number.isNaN(amt) || amt <= 0) {
-      return NextResponse.json({ ok: false, error: "Invalid amount" }, { status: 400 });
+    const ip = (req.headers.get("x-forwarded-for") || "").split(",")[0] || "";
+
+    const amount = Number(body?.amount ?? 0);
+    const currency = String(body?.currency || "UGX");
+    const phone = String(body?.phone || "");
+    const network = (body?.network || "airtel") as "mtn" | "airtel";
+    const donorEmail = (body?.donorEmail || "").trim();
+    const cadence: Cadence = (body?.cadence as Cadence) || "one_time"; // <-- default
+
+    if (!amount || !currency) {
+      return NextResponse.json({ ok: false, error: "Missing amount/currency" }, { status: 400 });
     }
 
-    // Client IP (best-effort)
-    const ip = (req.headers.get("x-forwarded-for") || "").split(",")[0]?.trim() || "";
+    const ref = `${process.env.MOBILE_REFERENCE_PREFIX || "HV-MM-"}${Date.now()}`;
 
-    // Try to record in WP — but *do not* fail the whole flow if WP is down.
-    try {
-      await createDonationIntent({
-        amount: amt,
-        currency: String(currency || "UGX"),
-        method: "mobile_money",
-        status: "issued_instructions", // we issued instructions PDF
-        reference,
-        client_ip: ip,
-        notes: "Airtel Merchant payment initiated (offline)",
-        // extra meta for admin:
-        // @ts-ignore
-        network: "airtel",
-        // @ts-ignore
-        merchant_code: "6890724",
-        // @ts-ignore
-        donor_email: donorEmail || "",
-        // @ts-ignore
-        send_currency: "UGX",
-        // @ts-ignore
-        receive_currency: "UGX",
-        // @ts-ignore
-        locale,
-      } as any);
-    } catch (wpErr) {
-      console.error("WP createDonationIntent failed:", wpErr);
-      // continue; we'll still return reference so UI goes to success page
-    }
+    const intent = await createDonationIntent({
+      amount,
+      currency,
+      method: "mobile_money",
+      status: "pending",
+      reference: ref,
+      client_ip: ip,
+      // extra meta saved into WP:
+      // @ts-ignore meta fields
+      phone,
+      // @ts-ignore
+      network,
+      // @ts-ignore
+      donor_email: donorEmail || "",
+      // @ts-ignore
+      recurring_cadence: cadence, // <-- save it
+      // you can also store merchant_code if you wish
+      // @ts-ignore
+      merchant_code: process.env.AIRTEL_MERCHANT_CODE || "6890724",
+      // @ts-ignore
+      notes: "Airtel Merchant payment initiated (offline)",
+    } as any);
 
-    return NextResponse.json({ ok: true, reference }, { status: 200 });
+    return NextResponse.json({
+      ok: true,
+      intentId: intent?.id || null,
+      reference: ref,
+    });
   } catch (e: any) {
-    console.error("MM initiate fatal:", e?.message || e);
-    // Even if parsing failed, return a cancel signal
-    return NextResponse.json({ ok: false, error: "init_failed" }, { status: 200 });
+    return NextResponse.json({ ok: false, error: e.message }, { status: 500 });
   }
 }

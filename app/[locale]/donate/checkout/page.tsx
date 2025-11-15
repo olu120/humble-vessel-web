@@ -5,6 +5,7 @@ import { useSearchParams, usePathname } from "next/navigation";
 import Section from "@/components/Section";
 import Button from "@/components/Button";
 
+
 // Small helper to turn ArrayBuffer -> base64 in the browser (no Node Buffer)
 function arrayBufferToBase64(buf: ArrayBuffer): string {
   let binary = "";
@@ -14,6 +15,7 @@ function arrayBufferToBase64(buf: ArrayBuffer): string {
   // btoa expects binary string
   return typeof btoa !== "undefined" ? btoa(binary) : "";
 }
+
 
 function CheckoutInner() {
   const sp = useSearchParams();
@@ -38,6 +40,9 @@ function CheckoutInner() {
   const proceed = async (): Promise<void> => {
     if (loading) return;
     setLoading(true);
+
+    const cadence = (sp.get("cadence") as "one_time" | "weekly" | "biweekly" | "monthly") || "one_time";
+// ...
 
     // Basic consent gate (applies to both tabs)
     if (!consent) {
@@ -74,6 +79,7 @@ function CheckoutInner() {
           currency: "UGX",
           network: "airtel", // hard-coded to Airtel Merchant flow
           donorEmail: donorEmailLocal || undefined,
+          cadence
         }),
       });
 
@@ -154,6 +160,7 @@ function CheckoutInner() {
         currency: "USD",
         donorName,
         donorEmail,
+        cadence
       }),
     });
     const data = await res.json();
