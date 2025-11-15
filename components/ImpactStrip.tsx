@@ -52,4 +52,5 @@ export default function ImpactStrip({ stats }: { stats: Stat[] }) {
       </Container>
     </section>
   );
+  
 }

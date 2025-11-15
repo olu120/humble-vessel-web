@@ -14,13 +14,13 @@ export default function TransparencyBand({ locale, href }: Props) {
       ? {
           title: "Obwenkanya n’Obuweereza Obulabiseeko",
           desc:
-            "Tuwandiika buli ssente ezituyitirako— okuva mu nsasula okutuuka ku byatwaliddwa ku bantu n’eddwaaliro.",
+            "Tuwandiika buli ssente ezituyitirako okuva mu nsasula okutuuka ku byatwaliddwa ku bantu n’eddwaaliro.",
           cta: "Laba engeri ssente gye zikoleddwa",
         }
       : {
           title: "Transparency & Impact",
           desc:
-            "We publish where donations go — from incoming funds to real-world care delivered.",
+            "We publish where donations go from incoming funds to real-world care delivered.",
           cta: "See how your gift is used",
         };
 

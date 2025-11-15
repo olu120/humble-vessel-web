@@ -1,92 +1,50 @@
-// app/api/volunteer/submit/route.ts
-export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
-
-import { NextResponse } from "next/server";
-
-type AnyObj = Record<string, unknown>;
-
-function str(v: unknown): string {
-  return (v ?? "").toString().trim();
-}
+// app/api/volunteer/apply/route.ts
+export const runtime = 'nodejs';
+import { NextResponse } from 'next/server';
+import nodemailer from 'nodemailer';
 
 export async function POST(req: Request) {
   try {
-    // Accept JSON or x-www-form-urlencoded (just in case)
-    let body: AnyObj = {};
-    const ctype = req.headers.get("content-type") || "";
+    const body = await req.json().catch(() => ({} as any));
+    const {
+      first_name = '',
+      last_name  = '',
+      email      = '',
+      phone      = '',
+      interest_area = '',
+      message = ''
+    } = body || {};
 
-    if (ctype.includes("application/json")) {
-      body = await req.json();
-    } else if (ctype.includes("application/x-www-form-urlencoded")) {
-      const form = await req.formData();
-      form.forEach((v, k) => (body[k] = v));
-    } else {
-      // Try JSON anyway; fail softly
-      try { body = await req.json(); } catch { body = {}; }
+    // -------- email via SMTP (uses your .env)
+    const host = process.env.SMTP_HOST;
+    const port = Number(process.env.SMTP_PORT || 587);
+    const user = process.env.SMTP_USER;
+    const pass = process.env.SMTP_PASS;
+    const to   = process.env.FROM_EMAIL || 'info@humblevesselfoundationandclinic.org';
+    const from = `${process.env.FROM_NAME || 'Humble Vessel'} <${to}>`;
+
+    if (host && user && pass) {
+      const tx = nodemailer.createTransport({ host, port, auth: { user, pass }});
+      await tx.sendMail({
+        from,
+        to,
+        subject: `New Volunteer Application — ${first_name} ${last_name}`,
+        text:
+`Name: ${first_name} ${last_name}
+Email: ${email}
+Phone: ${phone}
+Interest: ${interest_area}
+
+Message:
+${message || '-'}
+`,
+      });
     }
 
-    // Normalize ALL expected aliases from the client
-    const firstname =
-      str(body.firstname ?? body.first_name ?? body.firstName);
-    const lastname =
-      str(body.lastname ?? body.last_name ?? body.lastName);
-    const email = str(body.email);
-    const phone = str(body.phone);
-    const interestedarea =
-      str(body.interestedarea ?? body.interest_area ?? body.interestArea);
-    const message = str(body.message);
+    // In the future we can also append to Google Sheets here if you like.
 
-    // Build the canonical payload for Apps Script:
-    // timestamp is added by Apps Script; we only send these keys.
-    const payload = {
-      firstname,
-      lastname,
-      email,
-      phone,
-      interestedarea,
-      message,
-    };
-
-    const url = process.env.GSHEET_WEBAPP_URL;
-    if (!url) {
-      return NextResponse.json(
-        { ok: false, error: "GSHEET_WEBAPP_URL not set" },
-        { status: 500 }
-      );
-    }
-
-    const res = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      // Send JSON exactly as your Apps Script expects
-      body: JSON.stringify(payload),
-      // No CORS flags needed; this is server-to-server
-    });
-
-    const text = await res.text();
-    let data: any;
-    try {
-      data = JSON.parse(text);
-    } catch {
-      return NextResponse.json(
-        { ok: false, error: "Invalid JSON from Apps Script", raw: text },
-        { status: 502 }
-      );
-    }
-
-    if (!res.ok || !data?.ok) {
-      return NextResponse.json(
-        { ok: false, error: data?.error || `Sheet error ${res.status}` },
-        { status: 500 }
-      );
-    }
-
-    return NextResponse.json({ ok: true, data });
+    return NextResponse.json({ ok: true });
   } catch (e: any) {
-    return NextResponse.json(
-      { ok: false, error: e?.message || "Unknown error" },
-      { status: 500 }
-    );
+    return NextResponse.json({ ok: false, error: e?.message || 'Unknown error' }, { status: 500 });
   }
 }
