@@ -1,229 +1,187 @@
+// app/api/payments/swift/pdf/route.ts
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
-import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
-import fs from "fs";
-import path from "path";
+import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 
 export async function POST(req: Request) {
-  const {
-    donorName,
-    donorEmail,
-    amount,
-    currency,
-    reference,
-    instructions,
-    feeUSD,
-    receiveCurrency,
-  } = await req.json();
+  try {
+    const body = await req.json();
+    const {
+      donorName,
+      amount,
+      currency,
+      reference,
+      feeUSD,
+      receiveCurrency,
+    } = body;
 
-  const website =
-    process.env.ORG_WEBSITE || "https://humblevesselfoundationandclinic.org";
-  const whatsapp = process.env.ORG_WHATSAPP || "+256703969110";
+    const sendCur = (currency || "USD").toUpperCase();
+    const recvCur = (receiveCurrency || process.env.SWIFT_RECEIVE_CURRENCY || "UGX").toUpperCase();
+    const fee = typeof feeUSD === "number" ? feeUSD : Number(process.env.SWIFT_FIXED_FEE_USD || 50);
 
-  // Brand colors
-  const BLUE = rgb(0, 0.47, 0.71);   // ~ #0077B6
-  const GREEN = rgb(0.13, 0.58, 0.32); // ~ #219653
-  const TEXT_MUTED = rgb(0.2, 0.2, 0.2);
+    const bankName = process.env.SWIFT_BANK_NAME || "<Bank Name>";
+    const bankAddress = process.env.SWIFT_BANK_ADDRESS || "<Bank Address>";
+    const swiftBic = process.env.SWIFT_SWIFT_BIC || "<SWIFT/BIC>";
+    const accountNo = process.env.SWIFT_ACCOUNT_NUMBER || "<Account Number>";
+    const benName = process.env.SWIFT_BENEFICIARY_NAME || "<Beneficiary Name>";
+    const benAddress = process.env.SWIFT_BENEFICIARY_ADDRESS || "<Beneficiary Address>";
 
-  const pdf = await PDFDocument.create();
+    // Create PDF
+    const pdfDoc = await PDFDocument.create();
+    const page = pdfDoc.addPage([595, 842]); // A4 portrait
+    const helv = await pdfDoc.embedFont(StandardFonts.Helvetica);
+    const helvBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
-  // Page / layout constants
-  const PAGE = { w: 595.28, h: 841.89 }; // A4
-  const MARGIN_L = 60;
-  const MARGIN_R = 60;
+    let y = 800;
+    const marginX = 60;
+    const lineHeight = 16;
 
-  const FOOTER_H = 40;
-  const FOOTER_Y = 30;
-  const CONTENT_BOTTOM = FOOTER_Y + FOOTER_H + 24; // safe bottom above footer
-
-  // helpers to add a new page and draw footer
-  const addPage = () => pdf.addPage([PAGE.w, PAGE.h]);
-  let page = addPage();
-  let y = PAGE.h - 120; // initial content Y
-
-  const fontReg = await pdf.embedFont(StandardFonts.Helvetica);
-  const fontBold = await pdf.embedFont(StandardFonts.HelveticaBold);
-
-  const drawFooter = (p: typeof page) => {
-    // top border of footer
-    p.drawLine({
-      start: { x: MARGIN_L, y: FOOTER_Y + FOOTER_H },
-      end: { x: PAGE.w - MARGIN_R, y: FOOTER_Y + FOOTER_H },
-      thickness: 0.8,
-      color: BLUE,
-    });
-
-    const size = 10;
-    // left text
-    p.drawText(website, {
-      x: MARGIN_L,
-      y: FOOTER_Y + 12,
-      size,
-      font: fontReg,
-      color: TEXT_MUTED,
-    });
-
-    // right text (simple right align)
-    const right = `WhatsApp: ${whatsapp}`;
-    const tw = fontReg.widthOfTextAtSize(right, size);
-    p.drawText(right, {
-      x: PAGE.w - MARGIN_R - tw,
-      y: FOOTER_Y + 12,
-      size,
-      font: fontReg,
-      color: TEXT_MUTED,
-    });
-  };
-
-  // Place footer on the first page immediately (and on every new page)
-  drawFooter(page);
-
-  // auto page-break if we're near the footer
-  const ensureSpace = (min: number) => {
-    if (y - min <= CONTENT_BOTTOM) {
-      page = addPage();
-      drawFooter(page);
-      y = PAGE.h - 60; // top margin for subsequent pages
-    }
-  };
-
-  // text wrapper with page-break awareness
-  const drawParagraph = (
-    text: string,
-    opts: { size?: number; bold?: boolean; color?: ReturnType<typeof rgb>; leading?: number } = {},
-  ) => {
-    const size = opts.size ?? 12;
-    const leading = opts.leading ?? size + 6;
-    const color = opts.color ?? rgb(0, 0, 0);
-    const font = opts.bold ? fontBold : fontReg;
-    const maxWidth = PAGE.w - (MARGIN_L + MARGIN_R);
-
-    const words = (text || "").split(/\s+/);
-    let line = "";
-
-    const flushLine = (ln: string) => {
-      ensureSpace(leading);
-      page.drawText(ln, { x: MARGIN_L, y, size, font, color });
-      y -= leading;
+    const drawHeading = (text: string) => {
+      page.drawText(text, {
+        x: marginX,
+        y,
+        size: 18,
+        font: helvBold,
+        color: rgb(0, 0.4, 0.7),
+      });
+      y -= 26;
     };
 
-    for (const w of words) {
-      const candidate = line ? `${line} ${w}` : w;
-      const width = font.widthOfTextAtSize(candidate, size);
-      if (width > maxWidth) {
-        if (line) flushLine(line);
-        // very long single word fallback
-        if (font.widthOfTextAtSize(w, size) > maxWidth) {
-          let chunk = "";
-          for (const ch of w) {
-            const test = chunk + ch;
-            if (font.widthOfTextAtSize(test, size) > maxWidth) {
-              flushLine(chunk);
-              chunk = ch;
-            } else {
-              chunk = test;
-            }
-          }
-          if (chunk) line = chunk;
-          else line = "";
-        } else {
+    const drawLabel = (label: string, value: string) => {
+      page.drawText(label, {
+        x: marginX,
+        y,
+        size: 11,
+        font: helvBold,
+        color: rgb(0.1, 0.1, 0.1),
+      });
+      page.drawText(value, {
+        x: marginX + 140,
+        y,
+        size: 11,
+        font: helv,
+        color: rgb(0.1, 0.1, 0.1),
+      });
+      y -= lineHeight;
+    };
+
+    const drawParagraph = (text: string) => {
+      const words = text.split(" ");
+      let line = "";
+      const maxWidth = 475;
+
+      for (const w of words) {
+        const trial = line ? line + " " + w : w;
+        const width = helv.widthOfTextAtSize(trial, 11);
+        if (width > maxWidth) {
+          page.drawText(line, {
+            x: marginX,
+            y,
+            size: 11,
+            font: helv,
+            color: rgb(0.1, 0.1, 0.1),
+          });
+          y -= lineHeight;
           line = w;
+        } else {
+          line = trial;
         }
-      } else {
-        line = candidate;
       }
+      if (line) {
+        page.drawText(line, {
+          x: marginX,
+          y,
+          size: 11,
+          font: helv,
+          color: rgb(0.1, 0.1, 0.1),
+        });
+        y -= lineHeight;
+      }
+      y -= 6;
+    };
+
+    // Header
+    page.drawText("Humble Vessel Foundation & Clinic", {
+      x: marginX,
+      y,
+      size: 20,
+      font: helvBold,
+      color: rgb(0, 0.4, 0.7),
+    });
+    y -= 28;
+    page.drawText("SWIFT Transfer Instructions", {
+      x: marginX,
+      y,
+      size: 13,
+      font: helv,
+      color: rgb(0.1, 0.1, 0.1),
+    });
+    y -= 30;
+
+    // Donor + reference
+    drawHeading("Your Details");
+    if (donorName) {
+      drawLabel("Donor name:", donorName);
     }
-    if (line) flushLine(line);
+    drawLabel("Amount:", `${sendCur} ${amount}`);
+    drawLabel("Receiving currency:", recvCur);
+    drawLabel("Payment reference:", reference);
+    y -= 16;
 
-    // small paragraph spacing
-    y -= 4;
-  };
+    // Bank account section
+    drawHeading("Account to Receive Your Donation");
+    drawLabel("Beneficiary:", benName);
+    drawLabel("Address:", benAddress);
+    y -= 10;
 
-  const drawHeading = (text: string) => {
-    drawParagraph(text, { bold: true, size: 14, color: BLUE, leading: 18 });
-  };
+    drawLabel("Bank:", bankName);
+    drawLabel("Bank address:", bankAddress);
+    drawLabel("SWIFT/BIC:", swiftBic);
+    drawLabel("Account number:", accountNo);
+    y -= 20;
 
-  const drawDivider = (thickness = 1.2, color = BLUE) => {
-    ensureSpace(18);
-    page.drawLine({
-      start: { x: MARGIN_L, y },
-      end: { x: PAGE.w - MARGIN_R, y },
-      thickness,
-      color,
+    // What to tell your bank
+    drawHeading("Instructions for Your Bank");
+    drawParagraph(
+      "1. You can send your donation from any major currency (for example USD, EUR, GBP, etc.). Your bank will send in your local currency and our account will receive the funds in " +
+        recvCur +
+        "."
+    );
+    drawParagraph(
+      "2. Please give your bank the Payment Reference above and ask them to include it exactly in the SWIFT transfer details."
+    );
+    drawParagraph(
+      `3. The receiving bank may deduct a fixed fee of about USD ${fee.toFixed(
+        0
+      )} before the funds reach the clinic.`
+    );
+    drawParagraph(
+      "4. If the bank asks for an invoice or proof, you may show them this page as the official donation instructions."
+    );
+
+    y -= 10;
+    page.drawText("Thank you for supporting Humble Vessel Foundation & Clinic.", {
+      x: marginX,
+      y,
+      size: 11,
+      font: helvBold,
+      color: rgb(0, 0.4, 0.2),
     });
-    y -= 24;
-  };
 
-  // --- Logo (PNG) ---
-  try {
-    const logoPath = path.join(process.cwd(), "public", "images", "logo.png");
-    const bytes = fs.readFileSync(logoPath);
-    const img = await pdf.embedPng(bytes);
+    const pdfBytes = await pdfDoc.save();
 
-    const targetH = 64;
-    const scale = targetH / img.height;
-
-    page.drawImage(img, {
-      x: MARGIN_L,
-      y: PAGE.h - 60 - targetH,
-      width: img.width * scale,
-      height: img.height * scale,
+    return new NextResponse(Buffer.from(pdfBytes), {
+      status: 200,
+      headers: {
+        "Content-Type": "application/pdf",
+        "Content-Disposition": `attachment; filename=HV_SWIFT_${reference}.pdf`,
+      },
     });
-  } catch {
-    // ignore missing logo
+  } catch (e: any) {
+    return new NextResponse(`Failed to generate PDF: ${e?.message || e}`, {
+      status: 500,
+    });
   }
-
-  // --- Header
-  drawParagraph("Humble Vessel Foundation & Clinic", {
-    bold: true,
-    size: 18,
-    color: BLUE,
-    leading: 22,
-  });
-  drawParagraph("Trusted Healthcare. Community Driven.", {
-    size: 12,
-    color: GREEN,
-  });
-  y -= 12;
-
-  // --- Donor info
-  if (donorName) drawParagraph(`Donor: ${donorName}`);
-  if (donorEmail) drawParagraph(`Email: ${donorEmail}`);
-  drawParagraph(`Donation: ${currency} ${Number(amount || 0).toLocaleString()}`);
-  drawParagraph(`Reference: ${reference}`, { bold: true });
-  y -= 6;
-
-  drawDivider(1.2, BLUE);
-
-  // --- Fees & Conversion
-  drawHeading("Fees & Conversion");
-  drawParagraph(`Send Currency: ${currency || "USD"}`);
-  drawParagraph(
-    `Receiving Currency: ${receiveCurrency || "UGX"} (bank FX rate applies)`,
-  );
-  if (typeof feeUSD === "number") {
-    drawParagraph(`Fixed Receiving Bank Fee: USD ${feeUSD}`);
-  }
-
-  drawDivider(0.8, BLUE);
-
-  // --- Instructions
-  drawHeading("Bank Transfer (SWIFT) Instructions");
-  // instructions may be multi-line; split by \n and draw each part with wrapping
-  String(instructions || "")
-    .split(/\r?\n/)
-    .forEach((line) => drawParagraph(line));
-
-  // (footer already drawn; our layout keeps a safe bottom margin)
-
-  const bytesOut = await pdf.save();
-  return new NextResponse(Buffer.from(bytesOut), {
-    status: 200,
-    headers: {
-      "Content-Type": "application/pdf",
-      "Content-Disposition": `attachment; filename="HumbleVessel_SWIFT_${reference}.pdf"`,
-    },
-  });
 }

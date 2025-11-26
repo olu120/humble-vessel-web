@@ -1,21 +1,24 @@
 // components/Header.tsx
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import Container from "./Container";
 import LanguageToggle from "./LanguageToggle";
-import { useEffect, useRef, useState } from "react";
 
 export default function Header({ locale }: { locale: "en" | "lg" }) {
   const [open, setOpen] = useState(false);
-  const panelRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     function onDocClick(e: MouseEvent) {
       if (!open) return;
-      if (panelRef.current && !panelRef.current.contains(e.target as Node)) setOpen(false);
+      if (panelRef.current && !panelRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
     }
+
     document.addEventListener("mousedown", onDocClick);
     return () => document.removeEventListener("mousedown", onDocClick);
   }, [open]);
@@ -26,33 +29,64 @@ export default function Header({ locale }: { locale: "en" | "lg" }) {
     donate: locale === "lg" ? "Waayo Eky’obuyambi" : "Donate",
     volunteer: locale === "lg" ? "Weyanjule" : "Volunteer",
     contact: locale === "lg" ? "Tuukirako" : "Contact",
+    gallery: locale === "lg" ? "Ebifaananyi" : "Gallery",
   };
+
+  const navLink =
+    "text-sm font-medium text-slate-800 transition-colors hover:text-brand-blue focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40 rounded-md px-1";
 
   return (
     <header className="sticky top-0 z-50 border-b bg-white/90 backdrop-blur">
-      <Container className="flex items-center justify-between h-16">
+      <Container className="flex h-16 items-center justify-between gap-4">
         {/* Logo */}
         <Link href={`/${locale}`} className="flex items-center gap-3">
-          <Image src="/images/logo.png" alt="Humble Vessel" width={170} height={36} className="hidden md:block" />
+          <span className="sr-only">Humble Vessel Foundation &amp; Clinic</span>
+          <Image
+            src="/images/logo.png"
+            alt="Humble Vessel"
+            width={170}
+            height={36}
+            className="hidden md:block"
+          />
         </Link>
 
         {/* Desktop Nav */}
-        <nav className="hidden md:flex items-center gap-6">
-          <Link href={`/${locale}`} className="hover:underline">{t.home}</Link>
-          <Link href={`/${locale}/about`} className="hover:underline">{t.about}</Link>
-          <Link href={`/${locale}/volunteer`} className="hover:underline">{t.volunteer}</Link>
-          <Link href={`/${locale}/contact`} className="hover:underline">{t.contact}</Link>
-          <Link href={`/${locale}/donate`} className="rounded-2xl bg-brand-blue px-4 py-2 text-white hover:opacity-90">{t.donate}</Link>
+        <nav className="hidden items-center gap-6 md:flex">
+          <Link href={`/${locale}`} className={navLink}>
+            {t.home}
+          </Link>
+          <Link href={`/${locale}/about`} className={navLink}>
+            {t.about}
+          </Link>
+          <Link href={`/${locale}/gallery`} className={navLink}>
+            {t.gallery}
+          </Link>
+          <Link href={`/${locale}/volunteer`} className={navLink}>
+            {t.volunteer}
+          </Link>
+          <Link href={`/${locale}/contact`} className={navLink}>
+            {t.contact}
+          </Link>
+
+          <Link
+            href={`/${locale}/donate`}
+            className="rounded-2xl bg-brand-blue px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:shadow-md hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/50"
+          >
+            {t.donate}
+          </Link>
+
           <LanguageToggle />
         </nav>
 
         {/* Mobile */}
-        <div className="md:hidden flex items-center gap-3">
+        <div className="flex items-center gap-3 md:hidden">
           <LanguageToggle />
           <button
-            className="p-2 border rounded-lg"
-            onClick={() => setOpen(!open)}
+            type="button"
+            className="inline-flex items-center justify-center rounded-lg border px-2 py-1 text-sm shadow-sm transition hover:bg-slate-50"
+            onClick={() => setOpen((v) => !v)}
             aria-expanded={open}
+            aria-label="Toggle navigation menu"
           >
             ☰
           </button>
@@ -61,13 +95,52 @@ export default function Header({ locale }: { locale: "en" | "lg" }) {
 
       {/* Mobile Menu */}
       {open && (
-        <div ref={panelRef} className="md:hidden border-t bg-white">
-          <Container size="wide" className="flex items-center justify-between h-16">
-            <Link href={`/${locale}`} onClick={() => setOpen(false)}>{t.home}</Link>
-            <Link href={`/${locale}/about`} onClick={() => setOpen(false)}>{t.about}</Link>
-            <Link href={`/${locale}/volunteer`} onClick={() => setOpen(false)}>{t.volunteer}</Link>
-            <Link href={`/${locale}/contact`} onClick={() => setOpen(false)}>{t.contact}</Link>
-            <Link href={`/${locale}/donate`} onClick={() => setOpen(false)} className="rounded-xl bg-brand-blue px-4 py-2 text-white">{t.donate}</Link>
+        <div ref={panelRef} className="border-t bg-white md:hidden">
+          <Container size="wide" className="py-3">
+            <nav className="flex flex-col gap-3 text-sm">
+              <Link
+                href={`/${locale}`}
+                onClick={() => setOpen(false)}
+                className={navLink}
+              >
+                {t.home}
+              </Link>
+              <Link
+                href={`/${locale}/about`}
+                onClick={() => setOpen(false)}
+                className={navLink}
+              >
+                {t.about}
+              </Link>
+              <Link
+                href={`/${locale}/gallery`}
+                onClick={() => setOpen(false)}
+                className={navLink}
+              >
+                {t.gallery}
+              </Link>
+              <Link
+                href={`/${locale}/volunteer`}
+                onClick={() => setOpen(false)}
+                className={navLink}
+              >
+                {t.volunteer}
+              </Link>
+              <Link
+                href={`/${locale}/contact`}
+                onClick={() => setOpen(false)}
+                className={navLink}
+              >
+                {t.contact}
+              </Link>
+              <Link
+                href={`/${locale}/donate`}
+                onClick={() => setOpen(false)}
+                className="mt-1 inline-flex items-center justify-center rounded-2xl bg-brand-blue px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:shadow-md hover:brightness-110"
+              >
+                {t.donate}
+              </Link>
+            </nav>
           </Container>
         </div>
       )}
