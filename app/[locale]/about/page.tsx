@@ -60,7 +60,7 @@ export default async function AboutPage({
   // Local images you’ll add under /public/images/about/
   const heroImg = "/images/hero-2.jpg"; // wide team/outreach photo
   const leaderImgs = {
-  founder: "/images/team/charlse.jpg", // add this image
+  founder: "/images/team/Charlse.jpg", // add this image
   team: "/images/hero-2.jpg",              // add this image (group photo)
 };
 
@@ -95,7 +95,7 @@ export default async function AboutPage({
   const founder = {
   img: leaderImgs.founder,
   name: locale === "lg" ? "Visioneer wa Mukago" : "Visioneer & Founder",
-  displayName: "Dr. Amina K.",
+  displayName: "Dr. Charlse",
   blurb:
     locale === "lg"
       ? "Akulembera okulaba nti obuweereza bwegatta ku bantu, era bulimu obwesigwa n’okukung’aanya."

@@ -1,3 +1,4 @@
+// app/[locale]/donate/donate-success/SuccessClient.tsx (or similar)
 "use client";
 
 import { Suspense, useEffect, useMemo, useState } from "react";
@@ -60,6 +61,8 @@ function Inner() {
 
   const urlMethod = (sp.get("method") as Method | null) || null;
   const refFromUrl = sp.get("ref") || "";
+  const urlAmount = sp.get("amount");
+  const urlCurrency = sp.get("currency");
 
   useEffect(() => {
     try {
@@ -67,7 +70,9 @@ function Inner() {
       const sw = sessionStorage.getItem("hv_last_swift_payload");
       if (mm) setMmPayload(JSON.parse(mm));
       if (sw) setSwiftPayload(JSON.parse(sw));
-    } catch {}
+    } catch {
+      // ignore
+    }
     setIsReady(true);
   }, []);
 
@@ -81,11 +86,21 @@ function Inner() {
   const reference =
     refFromUrl || mmPayload?.reference || swiftPayload?.reference || "";
 
-  const amount =
-    (method === "mm" ? mmPayload?.amount : swiftPayload?.amount) ?? 0;
+  // ---- Amount: URL first, then payload; safest parsing ----
+  const rawAmount =
+    method === "mm"
+      ? mmPayload?.amount ?? urlAmount
+      : swiftPayload?.amount ?? urlAmount;
 
+  const amountNum =
+    rawAmount !== undefined && rawAmount !== null && !Number.isNaN(Number(rawAmount))
+      ? Number(rawAmount)
+      : 0;
+
+  // ---- Currency: payload first, then URL, then sensible default ----
   const currency =
     (method === "mm" ? mmPayload?.currency : swiftPayload?.currency) ||
+    urlCurrency ||
     (method === "mm" ? "UGX" : "USD");
 
   const whatsapp = process.env.NEXT_PUBLIC_ORG_WHATSAPP || "+256 774 381 886";
@@ -96,6 +111,8 @@ function Inner() {
     const qs = new URLSearchParams();
     if (method) qs.set("method", method);
     if (reference) qs.set("ref", reference);
+    if (urlAmount) qs.set("amount", urlAmount);
+    if (urlCurrency) qs.set("currency", urlCurrency);
     const q = qs.toString();
     return q ? `${base}?${q}` : base;
   };
@@ -107,7 +124,7 @@ function Inner() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           merchantCode: "6890724",
-          amount,
+          amount: amountNum,
           currency,
           reference,
         }),
@@ -120,7 +137,9 @@ function Inner() {
       a.download = `HumbleVessel_Airtel_${reference || "instructions"}.pdf`;
       a.click();
       URL.revokeObjectURL(url);
-    } catch {}
+    } catch {
+      // ignore
+    }
   };
 
   const downloadSwiftPdf = async () => {
@@ -134,8 +153,8 @@ function Inner() {
           reference,
           donorName: payload.donorName,
           donorEmail: payload.donorEmail,
-          amount: payload.amount ?? amount,
-          currency: payload.currency ?? "USD",
+          amount: payload.amount ?? amountNum,
+          currency: payload.currency ?? currency ?? "USD",
           feeUSD: payload.feeUSD,
           receiveCurrency: payload.receiveCurrency ?? "UGX",
         }),
@@ -148,7 +167,9 @@ function Inner() {
       a.download = `HumbleVessel_SWIFT_${reference || "instructions"}.pdf`;
       a.click();
       URL.revokeObjectURL(url);
-    } catch {}
+    } catch {
+      // ignore
+    }
   };
 
   if (!isReady) {
@@ -160,9 +181,19 @@ function Inner() {
     return (
       <main className="max-w-2xl mx-auto p-6">
         <div className="flex items-center gap-3 mb-4">
-          <Link href={langHref("en")} className={locale === "en" ? "font-bold underline" : "underline"}>EN</Link>
+          <Link
+            href={langHref("en")}
+            className={locale === "en" ? "font-bold underline" : "underline"}
+          >
+            EN
+          </Link>
           <span>·</span>
-          <Link href={langHref("lg")} className={locale === "lg" ? "font-bold underline" : "underline"}>LG</Link>
+          <Link
+            href={langHref("lg")}
+            className={locale === "lg" ? "font-bold underline" : "underline"}
+          >
+            LG
+          </Link>
         </div>
 
         <h1 className="text-2xl font-bold mb-3">{t.title}</h1>
@@ -178,12 +209,30 @@ function Inner() {
     );
   }
 
+  const formattedAmount =
+    amountNum > 0
+      ? amountNum.toLocaleString(undefined, {
+          minimumFractionDigits: 0,
+          maximumFractionDigits: 0,
+        })
+      : "—";
+
   return (
     <main className="max-w-2xl mx-auto p-6">
       <div className="flex items-center gap-3 mb-4">
-        <Link href={langHref("en")} className={locale === "en" ? "font-bold underline" : "underline"}>EN</Link>
+        <Link
+          href={langHref("en")}
+          className={locale === "en" ? "font-bold underline" : "underline"}
+        >
+          EN
+        </Link>
         <span>·</span>
-        <Link href={langHref("lg")} className={locale === "lg" ? "font-bold underline" : "underline"}>LG</Link>
+        <Link
+          href={langHref("lg")}
+          className={locale === "lg" ? "font-bold underline" : "underline"}
+        >
+          LG
+        </Link>
       </div>
 
       <h1 className="text-2xl font-bold mb-4">{t.title}</h1>
@@ -193,10 +242,12 @@ function Inner() {
           <>
             <p className="mb-1">{t.mmIntro}</p>
             <ul className="list-disc ml-6 space-y-1 text-sm">
-              {t.mmSteps.map((s, i) => <li key={i}>{s}</li>)}
+              {t.mmSteps.map((s, i) => (
+                <li key={i}>{s}</li>
+              ))}
               <li>
                 <b>Ref:</b> {reference || "—"} &nbsp;•&nbsp; <b>{currency}</b>{" "}
-                {Number(amount || 0).toLocaleString()}
+                {formattedAmount}
               </li>
             </ul>
             <div className="pt-2">
@@ -208,7 +259,7 @@ function Inner() {
             <p className="mb-2">{t.swiftIntro}</p>
             <p className="text-sm">
               <b>Ref:</b> {reference || "—"} &nbsp;•&nbsp; <b>{currency}</b>{" "}
-              {Number(amount || 0).toLocaleString()}
+              {formattedAmount}
             </p>
             <div className="pt-2">
               <Button onClick={downloadSwiftPdf}>{t.downloadSwift}</Button>
@@ -219,10 +270,10 @@ function Inner() {
         <div className="pt-4 text-xs opacity-70 border-t mt-4">
           {t.help}{" "}
           <a
-            href={`https://wa.me/${(process.env.NEXT_PUBLIC_ORG_WHATSAPP || "+256774381886").replace(/\D/g, "")}`}
+            href={`https://wa.me/${whatsapp.replace(/\D/g, "")}`}
             className="underline"
           >
-            {process.env.NEXT_PUBLIC_ORG_WHATSAPP || "+256 774 381 886"}
+            {whatsapp}
           </a>
         </div>
       </div>
