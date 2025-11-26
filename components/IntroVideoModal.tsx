@@ -1,45 +1,68 @@
 // components/IntroVideoModal.tsx
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef } from "react";
 
-export default function IntroVideoModal() {
-  const [open, setOpen] = useState(false);
+interface IntroVideoModalProps {
+  open: boolean;
+  onClose: () => void;
+  src: string; // e.g. "/videos/hv-intro.mp4"
+}
+
+export default function IntroVideoModal({ open, onClose, src }: IntroVideoModalProps) {
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+
+  // Close with Esc
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
+
+  // Auto-play when opened
+  useEffect(() => {
+    if (open && videoRef.current) {
+      videoRef.current.currentTime = 0;
+      videoRef.current.play().catch(() => {
+        // ignore autoplay blocking
+      });
+    }
+  }, [open]);
+
+  if (!open) return null;
 
   return (
-    <>
-      {/* Trigger button – you can style this more later */}
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 px-4">
+      {/* backdrop click closes */}
       <button
         type="button"
-        onClick={() => setOpen(true)}
-        className="px-5 py-2 rounded-full bg-brand-blue text-white text-sm md:text-base shadow-md hover:shadow-lg transition"
-      >
-        ▶ Watch Intro Video
-      </button>
-
-      {open && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4">
-          <div className="relative w-full max-w-3xl">
-            <button
-              type="button"
-              onClick={() => setOpen(false)}
-              className="absolute top-2 right-2 rounded-full bg-black/60 text-white px-2 py-1 text-sm"
-            >
-              ✕
-            </button>
-
-            {/* Replace /videos/intro.mp4 once you upload the video to /public/videos */}
-            <video
-              controls
-              autoPlay
-              className="w-full rounded-2xl shadow-xl bg-black"
-            >
-              <source src="/videos/intro.mp4" type="video/mp4" />
-              Your browser does not support video playback.
-            </video>
-          </div>
+        aria-label="Close video"
+        className="absolute inset-0 cursor-default"
+        onClick={onClose}
+      />
+      <div className="relative z-10 w-full max-w-4xl">
+        <div className="mb-2 flex justify-end">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-full bg-black/70 px-3 py-1 text-sm text-white hover:bg-black"
+          >
+            ✕ Close
+          </button>
         </div>
-      )}
-    </>
+        <video
+          ref={videoRef}
+          className="w-full h-auto rounded-2xl bg-black shadow-2xl"
+          controls
+          playsInline
+        >
+          <source src={src} type="video/mp4" />
+          Your browser does not support the video tag.
+        </video>
+      </div>
+    </div>
   );
 }
