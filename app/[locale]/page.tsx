@@ -242,7 +242,7 @@ const storyCards: StoryCard[] = (posts || []).map((p: any) => ({
       {/* HERO */}
       <HeroMotion slides={slides} locale={locale} />
 {/* Timed donation popup */}
-      <DonationPopup />
+      <DonationPopup locale={locale} />
 
       {/* IMPACT */}
       <ImpactStrip stats={stats} />

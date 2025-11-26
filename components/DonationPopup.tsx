@@ -6,7 +6,7 @@ import Link from "next/link";
 import Button from "@/components/Button";
 
 type DonationPopupProps = {
-  locale: "en" | "lg";
+  locale?: "en" | "lg";
 };
 
 const STORAGE_KEY = "hv_donate_popup_seen";
