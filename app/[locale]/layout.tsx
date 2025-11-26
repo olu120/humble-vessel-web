@@ -6,6 +6,7 @@ import Footer from "@/components/Footer";
 import React from "react";
 import WhatsAppButton from "@/components/WhatsAppButton";
 import ChatWidget from "@/components/ChatWidget";
+import DonationPopup from "@/components/DonationPopup";
 
 const SITE = "https://humblevesselfoundationandclinic.org";
 const SUPPORTED = new Set(["en", "lg"]);
@@ -79,6 +80,8 @@ export default async function LocaleLayout({ children, params }: LocaleLayoutPro
       <body className="antialiased">
         <Header locale={locale} />
         {children}
+        {/* FIX: Pass locale here */}
+        <DonationPopup locale={locale} />
         <Footer />
  {/* WhatsApp floating button (offset above Tawk bubble); move to left if you prefer */}
         <WhatsAppButton position="right" bottomOffset={104} locale={locale} />

@@ -13,6 +13,8 @@ import OurStory from "@/components/OurStory";
 import TestimonialsSection from "@/components/TestimonialsSection";
 import MissionVision from "@/components/MissionVision";
 import GiveCTA from "@/components/GiveCTA";
+import DonationPopup from "@/components/DonationPopup";
+import GoogleReviewsEmbed from "@/components/GoogleReviewsEmbed";
 
 // --- helpers for posts ---
 function stripHtml(html: string) {
@@ -239,6 +241,8 @@ const storyCards: StoryCard[] = (posts || []).map((p: any) => ({
 
       {/* HERO */}
       <HeroMotion slides={slides} locale={locale} />
+{/* Timed donation popup */}
+      <DonationPopup />
 
       {/* IMPACT */}
       <ImpactStrip stats={stats} />
@@ -319,6 +323,8 @@ const storyCards: StoryCard[] = (posts || []).map((p: any) => ({
           stars: "★★★★★☆☆☆☆☆".slice(5 - Math.max(0, Math.min(5, r.rating)), 10 - Math.max(0, Math.min(5, r.rating))),
         }))}
       />
+      {/* External Google Reviews widget */}
+<GoogleReviewsEmbed />
       <div className="mt-4 -mb-2 text-center">
         <a className="inline-flex items-center gap-1 text-sm font-medium text-brand-blue hover:underline"
            href={`/${params.locale}/reviews`}>

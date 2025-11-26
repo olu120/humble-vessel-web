@@ -1,3 +1,4 @@
+// app/api/payments/swift/email/route.ts
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -6,67 +7,68 @@ import nodemailer from "nodemailer";
 
 export async function POST(req: Request) {
   try {
-    const { donorEmail, donorName, instructions, reference, amount, currency, feeUSD, receiveCurrency } =
-      await req.json();
+    const data = await req.json();
+    const {
+      donorEmail,
+      donorName,
+      amount,
+      currency,
+      reference,
+      instructions,
+      feeUSD,
+      receiveCurrency,
+    } = data;
 
-    if (!donorEmail || !reference || !instructions) {
-      return NextResponse.json({ ok: false, error: "Missing fields" }, { status: 400 });
-    }
-
-    // 1) Generate the same branded PDF by calling our own /pdf route
     const base = process.env.SITE_URL || "http://localhost:3000";
+
+    // Generate PDF from the same endpoint the UI uses
     const pdfRes = await fetch(`${base}/api/payments/swift/pdf`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        donorEmail,
-        donorName,
-        amount,
-        currency,
-        reference,
-        instructions,
-        feeUSD,
-        receiveCurrency,
-      }),
+      body: JSON.stringify(data),
     });
-    if (!pdfRes.ok) {
-      throw new Error("Failed to build PDF");
-    }
-    const pdfBuffer = Buffer.from(await pdfRes.arrayBuffer());
 
-    // 2) Send Mail
-    const transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST!,
-      port: Number(process.env.SMTP_PORT || 587),
+    const pdf = Buffer.from(await pdfRes.arrayBuffer());
+
+    const t = nodemailer.createTransport({
+      host: process.env.SMTP_HOST,
+      port: Number(process.env.SMTP_PORT),
       secure: false,
       auth: {
-        user: process.env.SMTP_USER!,
-        pass: process.env.SMTP_PASS!,
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS,
       },
     });
 
-    const fromName = process.env.FROM_NAME || "Humble Vessel";
-    const fromEmail = process.env.FROM_EMAIL || "no-reply@humblevessel.org";
-
-    await transporter.sendMail({
-      from: `${fromName} <${fromEmail}>`,
+    await t.sendMail({
+      from: `"Humble Vessel" <${process.env.FROM_EMAIL}>`,
       to: donorEmail,
-      subject: `Your SWIFT Instructions – Ref ${reference}`,
-      text:
-`Hello ${donorName || "Donor"},
+      subject: `Your SWIFT Transfer Instructions (Ref ${reference})`,
+      text: `
+Hello ${donorName || "Friend"},
 
-Thank you for your gift to Humble Vessel Foundation & Clinic.
+Thank you for choosing to support Humble Vessel Foundation & Clinic.
 
-Attached is your SWIFT transfer instruction PDF. Please include the payment reference exactly as shown.
+Attached is a one–page PDF with everything your bank needs to send your donation.
 
-If you have any issues, reply to this email or WhatsApp us.
+Key points:
+• You can send from your local currency (USD, EUR, GBP, etc.).  
+• Our bank receives funds in ${receiveCurrency || "UGX"} and converts automatically.  
+• Ask your bank to include this reference exactly:
+
+    ${reference}
+
+A bank on the receiving side may deduct a fixed fee of about USD ${feeUSD ?? 50}.
+
+If you need any help while making the transfer, simply reply to this email or WhatsApp us.
 
 With gratitude,
-Humble Vessel`,
+Humble Vessel Foundation & Clinic
+      `.trim(),
       attachments: [
         {
-          filename: `HumbleVessel_SWIFT_${reference}.pdf`,
-          content: pdfBuffer,
+          filename: `HV_SWIFT_${reference}.pdf`,
+          content: pdf,
         },
       ],
     });

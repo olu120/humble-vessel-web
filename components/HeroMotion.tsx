@@ -5,6 +5,8 @@ import Image from "next/image";
 import Link from "next/link";
 import Button from "./Button";
 import { useEffect, useMemo, useRef, useState } from "react";
+import IntroVideoModal from "@/components/IntroVideoModal";
+
 
 type Slide = {
   img: string; // local /public path recommended
@@ -108,7 +110,9 @@ export default function HeroMotion({
                   </Link>
                 )
               )}
+              <IntroVideoModal />
             </div>
+            
           )}
         </div>
       </div>

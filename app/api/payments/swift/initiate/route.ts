@@ -1,3 +1,4 @@
+// app/api/donate/initiative/swift/route.ts
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -9,145 +10,108 @@ type Cadence = "one_time" | "weekly" | "biweekly" | "monthly";
 
 export async function POST(req: Request) {
   try {
-    // ---- parse body (with cadence) ----
-    const body = await req.json() as {
-      amount?: number | string;
-      currency?: string;
-      donorName?: string;
-      donorEmail?: string;
-      cadence?: Cadence;
-    };
+    const body = await req.json();
+    const ip = (req.headers.get("x-forwarded-for") || "").split(",")[0];
 
-    const ip = (req.headers.get("x-forwarded-for") || "").split(",")[0] || "";
     if (!allow(ip)) {
       return NextResponse.json({ ok: false, error: "Too many requests" }, { status: 429 });
     }
 
-    const amountNum = Number(body?.amount ?? 0);
-    const donorName  = (body?.donorName || "").trim();
-    const donorEmail = (body?.donorEmail || "").trim();
-    const sendCur    = String(body?.currency || "USD").toUpperCase();
-    const cadence: Cadence = (body?.cadence as Cadence) || "one_time";
+    const amount = Number(body.amount || 0);
+    const donorEmail = (body.donorEmail || "").trim();
+    const donorName = (body.donorName || "").trim();
+    const sendCur = (body.currency || "USD").toUpperCase();
+    const cadence: Cadence = body.cadence || "one_time";
 
-    if (!amountNum || !donorEmail) {
-      return NextResponse.json({ ok: false, error: "Missing amount or donor email" }, { status: 400 });
+    if (!amount || !donorEmail) {
+      return NextResponse.json(
+        { ok: false, error: "Missing amount or donor email" },
+        { status: 400 }
+      );
     }
 
-    // ---- env + reference ----
-    const ref     = `${process.env.SWIFT_REFERENCE_PREFIX || "HV-SWIFT-"}${Date.now()}`;
+    // ---- Reference ----
+    const reference = `${process.env.SWIFT_REFERENCE_PREFIX || "HV-"}${Date.now()}`;
     const recvCur = process.env.SWIFT_RECEIVE_CURRENCY || "UGX";
-    const feeUSD  = Number(process.env.SWIFT_FIXED_FEE_USD || 50);
-    const feeNote = process.env.SWIFT_FEES_NOTE || "A bank fee may be deducted on receipt.";
+    const feeUSD = Number(process.env.SWIFT_FIXED_FEE_USD || 50);
 
-    // ---- optional intermediary block ----
-    const intermediary =
-      (process.env.SWIFT_INTERMEDIARY_BANK_NAME || process.env.SWIFT_INTERMEDIARY_SWIFT_BIC)
-        ? `
-Intermediary/Correspondent Bank:
-  Name: ${process.env.SWIFT_INTERMEDIARY_BANK_NAME || "<Name>"}
-  Address: ${process.env.SWIFT_INTERMEDIARY_BANK_ADDRESS || "<Address>"}
-  SWIFT/BIC: ${process.env.SWIFT_INTERMEDIARY_SWIFT_BIC || "<SWIFT/BIC>"}`
-            .trim()
-        : "";
-
-    // ---- instructions text ----
+    // ---- CLEAN, SIMPLE, DONOR-FRIENDLY INSTRUCTIONS ----
     const instructions = `
-Bank Transfer (SWIFT) Instructions
+International Bank Transfer (SWIFT)
 
-Beneficiary:
-  Name: ${process.env.SWIFT_BENEFICIARY_NAME || "<Beneficiary Name>"}
-  Address: ${process.env.SWIFT_BENEFICIARY_ADDRESS || "<Beneficiary Address>"}
+Thank you for your donation. Please complete your gift by making a SWIFT transfer using the details below. 
+
+Include the Payment Reference exactly as shown so we can match your transfer.
+
+Amount to Send: ${sendCur} ${amount.toLocaleString()}
+Receiving Currency: ${recvCur}
+Estimated Bank Fee: USD ${feeUSD}
+
+Payment Reference (REQUIRED): ${reference}
 
 Beneficiary Bank:
-  Name: ${process.env.SWIFT_BANK_NAME || "<Bank Name>"}
-  Address: ${process.env.SWIFT_BANK_ADDRESS || "<Bank Address>"}
-  SWIFT/BIC: ${process.env.SWIFT_SWIFT_BIC || "<SWIFT/BIC>"}
+${process.env.SWIFT_BANK_NAME}
+${process.env.SWIFT_BANK_ADDRESS}
+SWIFT/BIC: ${process.env.SWIFT_SWIFT_BIC}
+Account Number: ${process.env.SWIFT_ACCOUNT_NUMBER}
 
-Account Number: ${process.env.SWIFT_ACCOUNT_NUMBER || "<Account Number>"}
+Beneficiary:
+${process.env.SWIFT_BENEFICIARY_NAME}
+${process.env.SWIFT_BENEFICIARY_ADDRESS}
 
-Amount to Send: ${sendCur} ${amountNum}
-Receiving Currency: ${recvCur} (converted by bank FX rate)
-Fixed Receiving Bank Fee: USD ${feeUSD}
+Notes:
+• Some banks deduct a fixed receiving fee (usually around USD ${feeUSD}).
+• International transfers typically start from USD 100.
+• Please share this information directly with your bank or enter it into your online banking app.
+    `.trim();
 
-Payment Reference (include exactly): ${ref}
-
-${intermediary ? intermediary + "\n" : ""}Notes: ${feeNote}`.trim();
-
-    // ---- save intent to WP (includes cadence) ----
-    const intent = await createDonationIntent({
-      amount: amountNum,
-      currency: sendCur,         // donor send currency
+    // ---- Save intent ----
+    await createDonationIntent({
+      amount,
+      currency: sendCur,
       method: "swift",
       status: "issued_instructions",
-      reference: ref,
+      reference,
       client_ip: ip,
       notes: "SWIFT instructions issued",
 
-      // meta
-      // @ts-ignore
-      donor_name: donorName,
+      // Meta saved in WordPress
       // @ts-ignore
       donor_email: donorEmail,
       // @ts-ignore
-      send_currency: sendCur,
+      donor_name: donorName,
       // @ts-ignore
-      receive_currency: recvCur,
-      // @ts-ignore
-      fixed_fee_usd: feeUSD,
-      // @ts-ignore
-      recurring_cadence: cadence,  // <--- NEW
-    } as any);
+      recurring_cadence: cadence,
+    });
 
-    // ---- email: fire-and-forget (instructions email) ----
-    try {
-      const base = process.env.SITE_URL || "http://localhost:3000";
-      fetch(`${base}/api/payments/swift/email`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          donorEmail,
-          donorName,
-          instructions,
-          reference: ref,
-          amount: amountNum,
-          currency: sendCur,
-          feeUSD,
-          receiveCurrency: recvCur,
-        }),
-      }).catch(() => {});
-    } catch {}
+    // ---- Email instructions ----
+    const base = process.env.SITE_URL || "http://localhost:3000";
 
-    // ---- (optional) quick receipt email without PDF ----
-    try {
-      const base = process.env.SITE_URL || "http://localhost:3000";
-      await fetch(`${base}/api/notifications/email/receipt`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          type: "swift",
-          to: donorEmail,
-          donorName,
-          amount: amountNum,
-          currency: sendCur,
-          reference: ref,
-        }),
-      });
-    } catch {}
+    fetch(`${base}/api/payments/swift/email`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        donorEmail,
+        donorName,
+        amount,
+        currency: sendCur,
+        reference,
+        instructions,
+        feeUSD,
+        receiveCurrency: recvCur,
+      }),
+    }).catch(() => {});
 
-    // ---- response ----
     return NextResponse.json({
       ok: true,
-      instructions,
-      reference: ref,
-      amount: amountNum,
+      reference,
+      amount,
       currency: sendCur,
-      donorName,
       donorEmail,
-      feeUSD,
-      receiveCurrency: recvCur,
-      intentId: intent?.id || null,
-      cadence, // echoed back (optional)
+      donorName,
+      instructions,
     });
+
   } catch (e: any) {
     return NextResponse.json({ ok: false, error: e.message }, { status: 500 });
   }
