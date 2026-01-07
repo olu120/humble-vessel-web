@@ -5,34 +5,54 @@ import { useSearchParams, usePathname } from "next/navigation";
 import Section from "@/components/Section";
 import Button from "@/components/Button";
 
+type Cadence = "one_time" | "weekly" | "biweekly" | "monthly";
+type Tab = "local" | "intl";
 
-// Small helper to turn ArrayBuffer -> base64 in the browser (no Node Buffer)
+// ArrayBuffer -> base64 (browser)
 function arrayBufferToBase64(buf: ArrayBuffer): string {
   let binary = "";
   const bytes = new Uint8Array(buf);
-  const len = bytes.byteLength;
-  for (let i = 0; i < len; i++) binary += String.fromCharCode(bytes[i]);
-  // btoa expects binary string
+  for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
   return typeof btoa !== "undefined" ? btoa(binary) : "";
 }
 
+async function safeJson(res: Response) {
+  try {
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
+
+function extractErrorMessage(data: any): string | null {
+  if (!data) return null;
+  if (typeof data === "string") return data;
+  if (data.error) return String(data.error);
+  if (data.message) return String(data.message);
+  return null;
+}
 
 function CheckoutInner() {
   const sp = useSearchParams();
   const pathname = usePathname() || "/en";
   const locale = (pathname.split("/")[1] || "en") as "en" | "lg";
 
-  const tab = (sp.get("tab") as "local" | "intl") || "local";
-  const amount = Number(sp.get("amount") || 0);
+  const tab = (sp.get("tab") as Tab) || "local";
+  const amountRaw = sp.get("amount");
+  const amount = amountRaw ? Number(amountRaw) : 0;
 
-  // Local (Airtel Merchant) — email only
+  const cadence =
+    (sp.get("cadence") as Cadence) ||
+    "one_time";
+
+  // Local
   const [donorEmailLocal, setDonorEmailLocal] = useState("");
 
-  // Intl (SWIFT)
+  // Swift
   const [donorName, setDonorName] = useState("");
   const [donorEmail, setDonorEmail] = useState("");
 
-  // Privacy consent (both flows)
+  // Consent
   const [consent, setConsent] = useState(false);
 
   const [loading, setLoading] = useState(false);
@@ -41,117 +61,114 @@ function CheckoutInner() {
     if (loading) return;
     setLoading(true);
 
-    const cadence = (sp.get("cadence") as "one_time" | "weekly" | "biweekly" | "monthly") || "one_time";
-// ...
-
-    // Basic consent gate (applies to both tabs)
-    if (!consent) {
-      alert(
-        locale === "lg"
-          ? "Bambi kaakasa nti okkiriza okutereka amawulire go okufuna risiti."
-          : "Please agree to the privacy statement so we can store your details for receipts."
+    if (!amount || Number.isNaN(amount) || amount <= 0) {
+      alert(locale === "lg"
+        ? "Omuwendo gw'ensimbi tegusoboka. Ddayo olonde omuwendo."
+        : "Invalid amount. Please go back and choose an amount."
       );
       setLoading(false);
       return;
     }
 
-    // ──────────────────────────
-    // LOCAL (Airtel Merchant)
-    // ──────────────────────────
+    if (!consent) {
+      alert(locale === "lg"
+        ? "Bambi kaakasa nti okkiriza okutereka amawulire go okufuna risiti."
+        : "Please agree to the privacy statement so we can store your details for receipts."
+      );
+      setLoading(false);
+      return;
+    }
+
+    // ───────── LOCAL ─────────
     if (tab === "local") {
-      // (Optional) validate email if provided
       if (donorEmailLocal && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(donorEmailLocal)) {
-        alert(
-          locale === "lg"
-            ? "Teeka email entuufu oba leka ekifo kino nga tekijjudde."
-            : "Please enter a valid email or leave it blank."
+        alert(locale === "lg"
+          ? "Teeka email entuufu oba leka ekifo kino nga tekijjudde."
+          : "Please enter a valid email or leave it blank."
         );
         setLoading(false);
         return;
       }
 
-      // 1) Create intent on server (keeps existing server behavior)
+      // ✅ initiate (server will email PDF if email provided — we’ll add that next)
       const res = await fetch("/api/payments/mobile-money/initiate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           amount,
           currency: "UGX",
-          network: "airtel", // hard-coded to Airtel Merchant flow
+          network: "airtel",
           donorEmail: donorEmailLocal || undefined,
-          cadence
+          cadence,
         }),
       });
 
-      const data = await res.json();
+      const data = await safeJson(res);
 
-      if (data?.reference) {
-        try {
-          // 2) Generate Airtel PDF on server
-          const resPdf = await fetch("/api/payments/mobile-money/pdf", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              merchantCode: "6890724",
-              reference: data.reference,
-              amount,
-              currency: "UGX",
-            }),
-          });
-
-          if (resPdf.ok) {
-            const buf = await resPdf.arrayBuffer();
-            const pdfBase64 = arrayBufferToBase64(buf);
-
-            // 3) Email the PDF (if donor provided email)
-            if (donorEmailLocal) {
-              await fetch("/api/payments/mobile-money/email", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  donorEmail: donorEmailLocal,
-                  reference: data.reference,
-                  pdfBytesBase64: pdfBase64,
-                }),
-              });
-            }
-
-            // 4) Download a copy for the donor immediately
-            const blob = new Blob([buf], { type: "application/pdf" });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement("a");
-            a.href = url;
-            a.download = `HumbleVessel_Airtel_${data.reference}.pdf`;
-            a.click();
-            URL.revokeObjectURL(url);
-          }
-        } catch {
-          // ignore and continue to success page
-        }
-
-        window.location.href = `/${locale}/donate/donate-success?method=mm&ref=${encodeURIComponent(
-          data.reference
-        )}`;
+      if (!res.ok) {
+        alert(
+          extractErrorMessage(data) ||
+          (locale === "lg" ? "Wabaddewo ekizibu. Gezaako nate." : "Something went wrong. Please try again.")
+        );
+        setLoading(false);
         return;
       }
 
-      window.location.href = `/${locale}/donate/donate-cancel`;
+      if (!data?.reference) {
+        alert(locale === "lg"
+          ? "Server tewaddemu reference. Gezaako nate."
+          : "Server did not return a reference. Please try again."
+        );
+        setLoading(false);
+        return;
+      }
+
+      // Optional: still download PDF for donor immediately
+      try {
+        const resPdf = await fetch("/api/payments/mobile-money/pdf", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            merchantCode: "6890724",
+            reference: data.reference,
+            amount,
+            currency: "UGX",
+          }),
+        });
+
+        if (resPdf.ok) {
+          const buf = await resPdf.arrayBuffer();
+
+          const blob = new Blob([buf], { type: "application/pdf" });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = `HumbleVessel_Airtel_${data.reference}.pdf`;
+          a.click();
+          URL.revokeObjectURL(url);
+        }
+      } catch {
+        // ignore
+      }
+
+      window.location.href =
+        `/${locale}/donate/donate-success?method=mm&ref=${encodeURIComponent(data.reference)}` +
+        `&amount=${encodeURIComponent(String(amount))}&currency=UGX`;
+
       return;
     }
 
-    // ──────────────────────────
-    // INTERNATIONAL (SWIFT)
-    // ──────────────────────────
+    // ───────── SWIFT ─────────
     if (!donorEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(donorEmail)) {
-      alert(
-        locale === "lg"
-          ? "Bambi teeka email entuufu okufuna PDF/risiti yo."
-          : "Please enter a valid email for your PDF/receipt."
+      alert(locale === "lg"
+        ? "Bambi teeka email entuufu okufuna PDF/risiti yo."
+        : "Please enter a valid email for your PDF/receipt."
       );
       setLoading(false);
       return;
     }
 
+    // ✅ initiate (SWIFT already emails on server)
     const res = await fetch("/api/payments/swift/initiate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -160,114 +177,86 @@ function CheckoutInner() {
         currency: "USD",
         donorName,
         donorEmail,
-        cadence
+        cadence,
       }),
     });
-    const data = await res.json();
 
-    if (data?.instructions && data?.reference) {
-      try {
-        // Generate SWIFT PDF (server)
-        const resPdf = await fetch("/api/payments/swift/pdf", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            instructions: data.instructions,
-            reference: data.reference,
-            donorName,
-            donorEmail,
-            amount,
-            currency: "USD",
-            feeUSD: data.feeUSD,
-            receiveCurrency: "UGX",
-          }),
-        });
+    const data = await safeJson(res);
 
-        if (resPdf.ok) {
-          const buf = await resPdf.arrayBuffer();
-          const pdfBase64 = arrayBufferToBase64(buf);
-
-          // Email PDF to donor
-          await fetch("/api/payments/swift/email", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              donorEmail,
-              donorName,
-              reference: data.reference,
-              pdfBytesBase64: pdfBase64,
-            }),
-          });
-
-          // Download a copy immediately
-          const blob = new Blob([buf], { type: "application/pdf" });
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement("a");
-          a.href = url;
-          a.download = `HumbleVessel_SWIFT_${data.reference}.pdf`;
-          a.click();
-          URL.revokeObjectURL(url);
-        }
-      } catch {
-        // ignore and continue to success page
-      }
-
-      window.location.href = `/${locale}/donate/donate-success?method=swift&ref=${encodeURIComponent(
-        data.reference
-      )}`;
-    } else {
-      window.location.href = `/${locale}/donate/donate-cancel`;
+    if (!res.ok) {
+      alert(
+        extractErrorMessage(data) ||
+        (locale === "lg" ? "Wabaddewo ekizibu. Gezaako nate." : "Something went wrong. Please try again.")
+      );
+      setLoading(false);
+      return;
     }
+
+    if (!data?.reference || !data?.instructions) {
+      alert(locale === "lg"
+        ? "Server tewaddemu reference/instructions. Gezaako nate."
+        : "Server did not return reference/instructions. Please try again."
+      );
+      setLoading(false);
+      return;
+    }
+
+    // Optional: download PDF immediately (but NO email here)
+    try {
+      const resPdf = await fetch("/api/payments/swift/pdf", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          instructions: data.instructions,
+          reference: data.reference,
+          donorName,
+          donorEmail,
+          amount,
+          currency: "USD",
+          feeUSD: data.feeUSD,
+          receiveCurrency: "UGX",
+        }),
+      });
+
+      if (resPdf.ok) {
+        const buf = await resPdf.arrayBuffer();
+        const blob = new Blob([buf], { type: "application/pdf" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `HumbleVessel_SWIFT_${data.reference}.pdf`;
+        a.click();
+        URL.revokeObjectURL(url);
+      }
+    } catch {
+      // ignore
+    }
+
+    window.location.href =
+      `/${locale}/donate/donate-success?method=swift&ref=${encodeURIComponent(data.reference)}` +
+      `&amount=${encodeURIComponent(String(amount))}&currency=USD`;
+
+    return;
   };
 
   return (
     <main>
-      <Section
-        title={
-          locale === "lg"
-            ? "Kakasa olw'okuwaayo ensasula"
-            : "Confirm your donation"
-        }
-      >
-        <div className="max-w-xl p-6 border rounded-2xl space-y-6">
-          {/* Type & Amount */}
+      <Section title={locale === "lg" ? "Kakasa olw'okuwaayo ensasula" : "Confirm your donation"}>
+        <div className="max-w-xl p-6 space-y-6 border rounded-2xl">
+
+          {/* Amount */}
           <div>
-            <p className="text-sm opacity-80">
-              {locale === "lg" ? "Ekika ky'ensasula" : "Donation type"}
-            </p>
-            <p className="text-lg font-medium">
-              {tab === "intl"
-                ? locale === "lg"
-                  ? "International (USD)"
-                  : "International (USD)"
-                : locale === "lg"
-                ? "Wano mu Uganda (UGX)"
-                : "Local (UGX)"}
-            </p>
-          </div>
-          <div>
-            <p className="text-sm opacity-80">
-              {locale === "lg" ? "Omuwendo" : "Amount"}
-            </p>
+            <p className="text-sm opacity-80">{locale === "lg" ? "Omuwendo" : "Amount"}</p>
             <p className="text-2xl font-semibold">
-              {tab === "intl"
-                ? `$${amount}`
-                : `UGX ${amount.toLocaleString()}`}
+              {tab === "intl" ? `$${amount}` : `UGX ${amount.toLocaleString()}`}
             </p>
           </div>
 
-          {/* LOCAL (Airtel merchant) */}
+          {/* LOCAL */}
           {tab === "local" && (
             <div className="space-y-3">
               <div className="px-4 py-3 text-sm border rounded-xl bg-gray-50">
-                <p className="font-medium">
-                  Airtel Money (Merchant Code)
-                </p>
-                <p className="text-xs opacity-75 mt-1">
-                  {locale === "lg"
-                    ? "Tujjakukuwerera PDF erimu entegeka zonna n’ensingo ya kisasu (reference)."
-                    : "We’ll generate a PDF with step-by-step instructions and your payment reference."}
-                </p>
+                <p className="font-medium">Airtel Money (Merchant Code)</p>
                 <p className="mt-2 text-sm">
                   <b>Merchant Code:</b> 6890724
                 </p>
@@ -275,9 +264,7 @@ function CheckoutInner() {
 
               <div>
                 <label className="block mb-1 text-sm">
-                  {locale === "lg"
-                    ? "Email (okufuna PDF ne risiti)"
-                    : "Donor email (for PDF/receipt)"}
+                  {locale === "lg" ? "Email (okufuna PDF ne risiti)" : "Donor email (for PDF/receipt)"}
                 </label>
                 <input
                   type="email"
@@ -286,72 +273,35 @@ function CheckoutInner() {
                   value={donorEmailLocal}
                   onChange={(e) => setDonorEmailLocal(e.target.value)}
                 />
-                <p className="mt-1 text-xs opacity-70">
-                  {locale === "lg"
-                    ? "Tujjakuweereza Airtel instructions PDF ne risiti yo."
-                    : "We’ll email your Airtel instructions PDF and receipt."}
-                </p>
               </div>
             </div>
           )}
 
-          {/* INTERNATIONAL (SWIFT) */}
+          {/* INTERNATIONAL */}
           {tab === "intl" && (
             <div className="space-y-3">
               <div>
-                <label className="block mb-1 text-sm">
-                  {locale === "lg"
-                    ? "Erinnya ly'omuwaayo"
-                    : "Donor name"}
-                </label>
+                <label className="block mb-1 text-sm">{locale === "lg" ? "Erinnya" : "Donor name"}</label>
                 <input
                   className="w-full px-4 py-2 border rounded-2xl"
-                  placeholder={locale === "lg" ? "Erinnya eryoona" : "Full name"}
                   value={donorName}
                   onChange={(e) => setDonorName(e.target.value)}
                 />
               </div>
+
               <div>
-                <label className="block mb-1 text-sm">
-                  {locale === "lg" ? "Email" : "Donor email"}
-                </label>
+                <label className="block mb-1 text-sm">{locale === "lg" ? "Email" : "Donor email"}</label>
                 <input
                   type="email"
                   className="w-full px-4 py-2 border rounded-2xl"
-                  placeholder="you@example.com"
                   value={donorEmail}
                   onChange={(e) => setDonorEmail(e.target.value)}
                 />
               </div>
-
-              <div className="px-4 py-3 text-sm border rounded-xl bg-yellow-50">
-                <p className="mb-1">
-                  <strong>
-                    {locale === "lg" ? "Okulabula:" : "Important:"}
-                  </strong>
-                </p>
-                <ul className="ml-5 space-y-1 list-disc">
-                  <li>
-                    {locale === "lg"
-                      ? "Ensasula ezitwalibwa mu USD ziteekebwa mu UGX ku rate ya bbanka."
-                      : "Transfers are sent in USD but the bank credits in UGX at their FX rate."}
-                  </li>
-                  <li>
-                    {locale === "lg"
-                      ? "Obuwumbi $50 busalibwa ku bbanka eyaniriza ensasula."
-                      : "A flat $50 receiving bank fee is deducted."}
-                  </li>
-                  <li>
-                    {locale === "lg"
-                      ? "Teekamu Payment Reference nga bwe kiri mu PDF."
-                      : "Include the Payment Reference exactly as shown in the PDF."}
-                  </li>
-                </ul>
-              </div>
             </div>
           )}
 
-          {/* Privacy / consent */}
+          {/* Consent */}
           <label className="flex items-start gap-2 text-sm">
             <input
               type="checkbox"
@@ -367,13 +317,7 @@ function CheckoutInner() {
           </label>
 
           <Button onClick={proceed} disabled={loading}>
-            {loading
-              ? locale === "lg"
-                ? "Okutambuza…"
-                : "Processing…"
-              : locale === "lg"
-              ? "Genda mumaaso"
-              : "Proceed"}
+            {loading ? (locale === "lg" ? "Okutambuza…" : "Processing…") : (locale === "lg" ? "Genda mumaaso" : "Proceed")}
           </Button>
         </div>
       </Section>

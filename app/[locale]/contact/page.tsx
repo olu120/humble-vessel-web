@@ -34,7 +34,7 @@ export default async function ContactPage({
   return (
     <main>
       {/* WhatsApp CTA Banner */}
-      <section className="bg-green-600 text-white py-4">
+      <section className="py-4 text-white bg-green-600">
         <Container className="flex flex-col items-center justify-between gap-3 text-center sm:flex-row sm:text-left">
           <div>
             <h2 className="text-lg font-semibold">Have questions?</h2>
@@ -46,7 +46,7 @@ export default async function ContactPage({
             href="https://wa.me/256774381886"
             target="_blank"
             rel="noopener noreferrer"
-            className="px-5 py-2 bg-white text-green-700 font-medium rounded-full hover:bg-green-50 transition"
+            className="px-5 py-2 font-medium text-green-700 transition bg-white rounded-full hover:bg-green-50"
           >
             WhatsApp
           </a>
@@ -90,10 +90,10 @@ export default async function ContactPage({
           ].map((item, i) => (
             <Reveal key={item.year} y={10} delay={i * 90}>
               <div className="flex items-start gap-6">
-                <div className="text-sm font-medium text-gray-500 w-16 shrink-0">
+                <div className="w-16 text-sm font-medium text-gray-500 shrink-0">
                   {item.year}
                 </div>
-                <div className="flex-1 p-4 bg-white rounded-2xl shadow-sm">
+                <div className="flex-1 p-4 bg-white shadow-sm rounded-2xl">
                   <h4 className="font-semibold">{item.title}</h4>
                   <p className="text-sm opacity-80">{item.text}</p>
                 </div>
@@ -114,7 +114,7 @@ export default async function ContactPage({
               { label: "Volunteers", value: "420" },
             ].map((stat, i) => (
               <Reveal key={stat.label} delay={i * 80} y={8}>
-                <div className="p-4 bg-white rounded-2xl shadow text-center">
+                <div className="p-4 text-center bg-white shadow rounded-2xl">
                   <p className="text-2xl font-semibold">{stat.value}</p>
                   <p className="text-xs opacity-70">{stat.label}</p>
                 </div>
@@ -123,7 +123,7 @@ export default async function ContactPage({
           </div>
 
           <Reveal y={8} delay={220}>
-            <div className="overflow-hidden rounded-2xl shadow-md">
+            <div className="overflow-hidden shadow-md rounded-2xl">
               <iframe
                 src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3988.8867380121!2d32.0251!3d0.3304!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x177da67c88d7b7b1%3A0x1c2cd5626b4042d!2sMityana!5e0!3m2!1sen!2sug!4v1698514000000"
                 width="100%"
@@ -136,50 +136,75 @@ export default async function ContactPage({
         </div>
       </Section>
 
-      {/* Leadership */}
+      {/* Leadership (Founder big + Team group photo) */}
       <Section title="Leadership" bg="alt">
-        <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-4">
-          {[
-            {
-              name: "Dr. Charlse",
-              role: "Founder & Director",
-              text: "Community physician leading strategy and partnerships.",
-              img: "/images/team/Charlse.jpg",
-            },
-            {
-              name: "James O.",
-              role: "Programs Lead",
-              text: "Oversees clinics and volunteer coordination.",
-              img: "/images/team/james.jpg",
-            },
-            {
-              name: "Grace N.",
-              role: "Maternal Health",
-              text: "Leads maternal care and safe delivery initiatives.",
-              img: "/images/team/grace.jpg",
-            },
-            {
-              name: "Peter M.",
-              role: "Operations",
-              text: "Manages logistics and partnerships on the ground.",
-              img: "/images/team/peter.jpg",
-            },
-          ].map((p, i) => (
-            <Reveal key={p.name} delay={i * 90} y={10}>
-              <div className="p-4 bg-white rounded-2xl shadow text-center">
+        <div className="grid items-stretch gap-4 lg:grid-cols-3">
+          {/* Founder card (bigger) */}
+          <Reveal y={10}>
+            <div className="p-6 bg-white shadow lg:col-span-2 rounded-2xl">
+              <div className="flex flex-col items-center gap-5 sm:flex-row sm:items-start">
                 <Image
-                  src={p.img}
-                  alt={p.name}
-                  width={80}
-                  height={80}
-                  className="mx-auto mb-2 rounded-full object-cover"
+                  src="/images/team/Charlse.jpg"
+                  alt="Dr. Charlse"
+                  width={160}
+                  height={160}
+                  className="object-cover rounded-2xl"
                 />
-                <h4 className="font-semibold">{p.name}</h4>
-                <p className="text-sm text-brand-blue">{p.role}</p>
-                <p className="mt-1 text-xs opacity-80">{p.text}</p>
+                <div className="text-center sm:text-left">
+                  <h4 className="text-xl font-semibold md:text-2xl">
+                    Dr. Charlse
+                  </h4>
+                  <p className="text-sm font-medium md:text-base text-brand-blue">
+                    Founder & Director
+                  </p>
+                  <p className="max-w-xl mt-2 text-sm opacity-80">
+                    Community physician leading strategy, partnerships, and
+                    program direction to improve access to care across Mityana
+                    and beyond.
+                  </p>
+
+                  {/* Optional quick highlights */}
+                  <div className="flex flex-wrap justify-center gap-2 mt-4 sm:justify-start">
+                    <span className="px-3 py-1 text-xs bg-gray-100 rounded-full">
+                      Strategy
+                    </span>
+                    <span className="px-3 py-1 text-xs bg-gray-100 rounded-full">
+                      Partnerships
+                    </span>
+                    <span className="px-3 py-1 text-xs bg-gray-100 rounded-full">
+                      Community care
+                    </span>
+                  </div>
+                </div>
               </div>
-            </Reveal>
-          ))}
+            </div>
+          </Reveal>
+
+          {/* Team group photo card */}
+          <Reveal y={10} delay={90}>
+            <div className="flex flex-col p-6 text-center bg-white shadow rounded-2xl">
+              <h4 className="text-lg font-semibold">Team</h4>
+              <p className="text-sm text-brand-blue">
+                Programs • Maternal Health • Operations
+              </p>
+
+              <div className="mt-4 overflow-hidden bg-gray-100 rounded-2xl">
+                {/* Replace this with your actual group photo path */}
+                <Image
+                  src="/images/hero-2.jpg"
+                  alt="Humble Vessel team group photo"
+                  width={800}
+                  height={600}
+                  className="w-full h-[220px] object-cover"
+                />
+              </div>
+
+              <p className="mt-3 text-xs opacity-80">
+                A dedicated group supporting clinics, outreach, logistics and
+                maternal health initiatives.
+              </p>
+            </div>
+          </Reveal>
         </div>
       </Section>
 

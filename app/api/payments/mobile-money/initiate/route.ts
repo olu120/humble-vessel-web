@@ -6,15 +6,22 @@ import { createDonationIntent } from "@/lib/wp-intents";
 
 type Cadence = "one_time" | "weekly" | "biweekly" | "monthly";
 
+function absoluteBase(req: Request) {
+  const host = req.headers.get("host")!;
+  const proto = host.includes("localhost") ? "http" : "https";
+  return `${proto}://${host}`;
+}
+
 export async function POST(req: Request) {
   try {
-    const body = await req.json() as {
+    const body = (await req.json()) as {
       amount?: number | string;
       currency?: string;
       phone?: string;
       network?: "mtn" | "airtel";
       donorEmail?: string;
-      cadence?: Cadence; // <-- new
+      donorName?: string;
+      cadence?: Cadence;
     };
 
     const ip = (req.headers.get("x-forwarded-for") || "").split(",")[0] || "";
@@ -24,13 +31,15 @@ export async function POST(req: Request) {
     const phone = String(body?.phone || "");
     const network = (body?.network || "airtel") as "mtn" | "airtel";
     const donorEmail = (body?.donorEmail || "").trim();
-    const cadence: Cadence = (body?.cadence as Cadence) || "one_time"; // <-- default
+    const donorName = (body?.donorName || "").trim();
+    const cadence: Cadence = (body?.cadence as Cadence) || "one_time";
 
     if (!amount || !currency) {
       return NextResponse.json({ ok: false, error: "Missing amount/currency" }, { status: 400 });
     }
 
     const ref = `${process.env.MOBILE_REFERENCE_PREFIX || "HV-MM-"}${Date.now()}`;
+    const merchantCode = process.env.AIRTEL_MERCHANT_CODE || "6890724";
 
     const intent = await createDonationIntent({
       amount,
@@ -39,21 +48,66 @@ export async function POST(req: Request) {
       status: "pending",
       reference: ref,
       client_ip: ip,
-      // extra meta saved into WP:
-      // @ts-ignore meta fields
+
       phone,
-      // @ts-ignore
       network,
-      // @ts-ignore
       donor_email: donorEmail || "",
-      // @ts-ignore
-      recurring_cadence: cadence, // <-- save it
-      // you can also store merchant_code if you wish
-      // @ts-ignore
-      merchant_code: process.env.AIRTEL_MERCHANT_CODE || "6890724",
-      // @ts-ignore
+      donor_name: donorName || "",
+      recurring_cadence: cadence,
+      merchant_code: merchantCode,
       notes: "Airtel Merchant payment initiated (offline)",
     } as any);
+
+    // ✅ Email local instructions + PDF ONCE from server
+    if (donorEmail) {
+      const base = absoluteBase(req);
+
+      // 1) Generate PDF
+      const pdfRes = await fetch(`${base}/api/payments/mobile-money/pdf`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          merchantCode,
+          reference: ref,
+          amount,
+          currency,
+        }),
+      });
+
+      if (pdfRes.ok) {
+        const buf = await pdfRes.arrayBuffer();
+        const pdfBase64 = Buffer.from(buf).toString("base64");
+
+        // 2) Send email
+        await fetch(`${base}/api/payments/mobile-money/email`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            donorEmail,
+            donorName,
+            amount,
+            currency,
+            reference: ref,
+            merchantCode,
+            pdfBytesBase64: pdfBase64,
+          }),
+        });
+      } else {
+        // Even if PDF fails, send a basic email (no attachment)
+        await fetch(`${base}/api/payments/mobile-money/email`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            donorEmail,
+            donorName,
+            amount,
+            currency,
+            reference: ref,
+            merchantCode,
+          }),
+        });
+      }
+    }
 
     return NextResponse.json({
       ok: true,

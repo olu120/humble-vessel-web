@@ -30,43 +30,27 @@ export async function POST(req: Request) {
 
     const base = absoluteBase(req);
 
+    // MOBILE MONEY: resend via receipt route (local)
     if (method === "mobile_money") {
-      // 1) Rebuild Airtel PDF
-      const pdfRes = await fetch(`${base}/api/payments/mobile-money/pdf`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reference }),
-      });
-      if (!pdfRes.ok) throw new Error("PDF generation failed");
-      const buf = await pdfRes.arrayBuffer();
-      const pdfBase64 = Buffer.from(buf).toString("base64");
-
-      // 2) Email it
-      const mailRes = await fetch(`${base}/api/payments/mobile-money/email`, {
+      const mailRes = await fetch(`${base}/api/notifications/email/receipt`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          donorEmail: email,
+          type: "local",
+          to: email,
+          donorName: donorName || "",
+          amount: 0,          // optional if your template needs it; ideally fetch from WP
+          currency: "UGX",     // optional; ideally fetch from WP
           reference,
-          pdfBytesBase64: pdfBase64,
+          merchantCode: process.env.AIRTEL_MERCHANT_CODE || "6890724",
         }),
       });
-      if (!mailRes.ok) throw new Error("Email sending failed");
 
+      if (!mailRes.ok) throw new Error("Email sending failed");
       return NextResponse.json({ ok: true });
     }
 
-    // SWIFT
-    const pdfRes = await fetch(`${base}/api/payments/swift/pdf`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      // Minimal payload; your SWIFT/pdf route will fill bank info server-side
-      body: JSON.stringify({ reference }),
-    });
-    if (!pdfRes.ok) throw new Error("PDF generation failed");
-    const buf = await pdfRes.arrayBuffer();
-    const pdfBase64 = Buffer.from(buf).toString("base64");
-
+    // SWIFT: resend via swift/email (it regenerates pdf internally)
     const mailRes = await fetch(`${base}/api/payments/swift/email`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -74,9 +58,9 @@ export async function POST(req: Request) {
         donorEmail: email,
         donorName: donorName || "",
         reference,
-        pdfBytesBase64: pdfBase64,
       }),
     });
+
     if (!mailRes.ok) throw new Error("Email sending failed");
 
     return NextResponse.json({ ok: true });

@@ -5,9 +5,71 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import nodemailer from "nodemailer";
 
+const WP_URL = process.env.WP_URL!;
+const WP_USER = process.env.WP_BASIC_USER || "";
+const WP_PASS_RAW = process.env.WP_BASIC_PASS || "";
+
+// Remove spaces from WP Application Password (safe)
+function wpAuthHeader() {
+  const pass = WP_PASS_RAW.replace(/\s+/g, "").trim();
+  const user = WP_USER.trim();
+  const basic = Buffer.from(`${user}:${pass}`).toString("base64");
+  return `Basic ${basic}`;
+}
+
+async function wpRequest(path: string, init?: RequestInit) {
+  const res = await fetch(`${WP_URL}${path}`, {
+    ...init,
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: wpAuthHeader(),
+      ...(init?.headers || {}),
+    },
+    cache: "no-store",
+  });
+
+  const text = await res.text();
+  let data: any = null;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    data = text;
+  }
+
+  if (!res.ok) {
+    throw new Error(`WP ${res.status}: ${typeof data === "string" ? data : data?.message || "Unknown error"}`);
+  }
+  return data;
+}
+
+// Find intent ID by reference
+async function findIntentIdByReference(reference: string): Promise<number | null> {
+  // WP REST supports search, but not meta_query by default.
+  // Because your CPT title isn't guaranteed, we’ll use search on title if you set it to include reference.
+  // If your title does NOT include reference, we'll still proceed without idempotency (but I recommend it does).
+  const q = encodeURIComponent(reference);
+  const items = await wpRequest(`/wp-json/wp/v2/donation-intents?search=${q}&per_page=5`);
+  if (Array.isArray(items) && items.length) {
+    // pick the one with exact meta reference match if present
+    const exact = items.find((it: any) => it?.meta?.reference === reference);
+    return (exact || items[0])?.id ?? null;
+  }
+  return null;
+}
+
+async function markSwiftEmailSent(intentId: number) {
+  return wpRequest(`/wp-json/wp/v2/donation-intents/${intentId}`, {
+    method: "POST",
+    body: JSON.stringify({
+      meta: { swift_email_sent: "1" },
+    }),
+  });
+}
+
 export async function POST(req: Request) {
   try {
     const data = await req.json();
+
     const {
       donorEmail,
       donorName,
@@ -19,14 +81,53 @@ export async function POST(req: Request) {
       receiveCurrency,
     } = data;
 
-    const base = process.env.SITE_URL || "http://localhost:3000";
+    if (!donorEmail || !reference) {
+      return NextResponse.json({ ok: false, error: "Missing donorEmail/reference" }, { status: 400 });
+    }
 
-    // Generate PDF from the same endpoint the UI uses
+    // ─────────────────────────────────────────
+    // ✅ Idempotency guard via WordPress meta
+    // ─────────────────────────────────────────
+    let intentId: number | null = null;
+    let alreadySent = false;
+
+    try {
+      if (WP_URL && WP_USER && WP_PASS_RAW) {
+        intentId = await findIntentIdByReference(reference);
+
+        if (intentId) {
+          const intent = await wpRequest(`/wp-json/wp/v2/donation-intents/${intentId}`);
+          alreadySent = intent?.meta?.swift_email_sent === "1" || intent?.meta?.swift_email_sent === true;
+        }
+      }
+    } catch {
+      // If WP check fails, we do not block sending (but duplicates can happen only if called twice)
+    }
+
+    if (alreadySent) {
+      return NextResponse.json({ ok: true, skipped: "already_sent" });
+    }
+
+    // ─────────────────────────────────────────
+    // Generate PDF (use absolute base from request host)
+    // ─────────────────────────────────────────
+    const host = req.headers.get("host")!;
+    const proto = host.includes("localhost") ? "http" : "https";
+    const base = `${proto}://${host}`;
+
     const pdfRes = await fetch(`${base}/api/payments/swift/pdf`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
     });
+
+    if (!pdfRes.ok) {
+      const errText = await pdfRes.text().catch(() => "");
+      return NextResponse.json(
+        { ok: false, error: `PDF generation failed: ${pdfRes.status} ${errText}` },
+        { status: 500 }
+      );
+    }
 
     const pdf = Buffer.from(await pdfRes.arrayBuffer());
 
@@ -52,8 +153,8 @@ Thank you for choosing to support Humble Vessel Foundation & Clinic.
 Attached is a one–page PDF with everything your bank needs to send your donation.
 
 Key points:
-• You can send from your local currency (USD, EUR, GBP, etc.).  
-• Our bank receives funds in ${receiveCurrency || "UGX"} and converts automatically.  
+• You can send from your local currency (USD, EUR, GBP, etc.).
+• Our bank receives funds in ${receiveCurrency || "UGX"} and converts automatically.
 • Ask your bank to include this reference exactly:
 
     ${reference}
@@ -72,6 +173,13 @@ Humble Vessel Foundation & Clinic
         },
       ],
     });
+
+    // Mark sent in WP (best-effort)
+    try {
+      if (intentId) await markSwiftEmailSent(intentId);
+    } catch {
+      // ignore
+    }
 
     return NextResponse.json({ ok: true });
   } catch (e: any) {
