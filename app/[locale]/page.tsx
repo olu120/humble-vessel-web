@@ -242,7 +242,9 @@ const storyCards: StoryCard[] = (posts || []).map((p: any) => ({
       {/* HERO */}
       <HeroMotion slides={slides} locale={locale} />
 {/* Timed donation popup */}
-      <DonationPopup />
+      {/* Timed donation popup */}
+<DonationPopup locale={locale} />
+
 
       {/* IMPACT */}
       <ImpactStrip stats={stats} />
@@ -263,7 +265,7 @@ const storyCards: StoryCard[] = (posts || []).map((p: any) => ({
      <Section title={dict.sections.stories}>
   <ul className="grid gap-6 md:grid-cols-2">
     {storyCards.map((p) => (
-      <li key={p.id} className="rounded-2xl bg-white shadow-card overflow-hidden">
+      <li key={p.id} className="overflow-hidden bg-white rounded-2xl shadow-card">
         <div className="relative aspect-[16/9] w-full bg-gray-100">
           {p.img ? (
             <img
@@ -271,10 +273,10 @@ const storyCards: StoryCard[] = (posts || []).map((p: any) => ({
               alt=""
               loading="lazy"
               decoding="async"
-              className="h-full w-full object-cover"
+              className="object-cover w-full h-full"
             />
           ) : (
-            <div className="flex h-full w-full items-center justify-center text-xs text-gray-500">
+            <div className="flex items-center justify-center w-full h-full text-xs text-gray-500">
               No image
             </div>
           )}
@@ -286,7 +288,7 @@ const storyCards: StoryCard[] = (posts || []).map((p: any) => ({
           />
           <p className="text-sm opacity-80">{p.excerpt}…</p>
           <a
-            className="mt-3 inline-block text-brand-blue underline"
+            className="inline-block mt-3 underline text-brand-blue"
             href={`/${params.locale}/stories/${p.slug}`}
           >
             {locale === "lg" ? "Soma ebisingawo" : "Read more"}
