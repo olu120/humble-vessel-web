@@ -339,7 +339,7 @@ export default async function HomePage({ params }: { params: { locale: string } 
       <div className="mt-4 -mb-2 text-center">
         <a
           className="inline-flex items-center gap-1 text-sm font-medium text-brand-blue hover:underline"
-          href={`/${params.locale}/reviews`}
+          href={`https://www.google.com/maps/place//data=!4m3!3m2!1s0x177da58a4d9029e7:0x915a1055811b213e!12e1?source=g.page.m.ia._&laa=nmx-review-solicitation-ia2`}
         >
           {locale === "lg" ? "Ebisingawo ku bujulizi" : "More reviews"} →
         </a>
