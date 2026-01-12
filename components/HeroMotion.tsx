@@ -3,10 +3,9 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
 import Button from "./Button";
-import { useEffect, useMemo, useRef, useState } from "react";
 import IntroVideoModal from "@/components/IntroVideoModal";
-
 
 type Slide = {
   img: string; // local /public path recommended
@@ -20,10 +19,12 @@ export default function HeroMotion({
   slides,
   locale,
   intervalMs = 5500,
+  heroVideoUrl,
 }: {
   slides: Slide[];
   locale: "en" | "lg";
   intervalMs?: number;
+  heroVideoUrl?: string;
 }) {
   const [idx, setIdx] = useState(0);
   const [paused, setPaused] = useState(false);
@@ -48,6 +49,7 @@ export default function HeroMotion({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [total]);
 
   const active = slides[idx];
@@ -69,7 +71,10 @@ export default function HeroMotion({
         <div
           key={i}
           className="absolute inset-0 transition-opacity duration-700 will-change-opacity"
-          style={{ opacity: i === idx || prefersReduced ? 1 : 0, zIndex: i === idx ? 1 : 0 }}
+          style={{
+            opacity: i === idx || prefersReduced ? 1 : 0,
+            zIndex: i === idx ? 1 : 0,
+          }}
           aria-hidden={i !== idx}
         >
           <Image
@@ -88,17 +93,19 @@ export default function HeroMotion({
       {/* Copy */}
       <div className="absolute inset-0 flex items-center justify-center">
         <div className="absolute inset-0 bg-black/50" />
-        <div className="relative z-10 mx-auto max-w-4xl px-4 sm:px-6 lg:px-8 text-center text-white">
-          <h1 className="text-3xl md:text-5xl font-semibold leading-tight md:leading-tight drop-shadow-lg">
+        <div className="relative z-10 max-w-4xl px-4 mx-auto text-center text-white sm:px-6 lg:px-8">
+          <h1 className="text-3xl font-semibold leading-tight md:text-5xl md:leading-tight drop-shadow-lg">
             {active.title}
           </h1>
+
           {active.subtitle && (
-            <p className="mt-3 md:mt-4 text-base md:text-lg opacity-90 drop-shadow">
+            <p className="mt-3 text-base md:mt-4 md:text-lg opacity-90 drop-shadow">
               {active.subtitle}
             </p>
           )}
+
           {!!active.ctas?.length && (
-            <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+            <div className="flex flex-wrap items-center justify-center gap-3 mt-6">
               {active.ctas.map((c, i) =>
                 c.variant === "secondary" ? (
                   <Link key={i} href={c.href}>
@@ -110,9 +117,10 @@ export default function HeroMotion({
                   </Link>
                 )
               )}
-              <IntroVideoModal />
+
+              {/* Video button: only renders if heroVideoUrl is truthy (IntroVideoModal returns null if empty) */}
+              <IntroVideoModal videoUrl={heroVideoUrl} />
             </div>
-            
           )}
         </div>
       </div>
@@ -124,20 +132,20 @@ export default function HeroMotion({
           <button
             aria-label="Previous slide"
             onClick={() => go(-1)}
-            className="absolute left-3 top-1/2 -translate-y-1/2 rounded-full border bg-white/70 p-2 hover:bg-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-blue"
+            className="absolute p-2 -translate-y-1/2 border rounded-full left-3 top-1/2 bg-white/70 hover:bg-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-blue"
           >
             ‹
           </button>
           <button
             aria-label="Next slide"
             onClick={() => go(1)}
-            className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full border bg-white/70 p-2 hover:bg-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-blue"
+            className="absolute p-2 -translate-y-1/2 border rounded-full right-3 top-1/2 bg-white/70 hover:bg-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-blue"
           >
             ›
           </button>
 
           {/* Dots */}
-          <div className="absolute bottom-3 left-0 right-0 flex items-center justify-center gap-2">
+          <div className="absolute left-0 right-0 flex items-center justify-center gap-2 bottom-3">
             {dots.map((i) => (
               <button
                 key={i}

@@ -151,3 +151,55 @@ export async function getTeam(): Promise<TeamMember[]> {
     `/wp-json/wp/v2/team?per_page=50&_fields=id,slug,title,acf`
   );
 }
+
+// ---- HERO VIDEO (WordPress) ------------------------------------------------
+
+// If you're storing hero video on a page (recommended simplest):
+// Create a page in WP with slug: "home" and an ACF field: hero_video_url
+export async function getHeroVideoUrl(): Promise<string> {
+  // Change "home" to whatever slug you use for your homepage settings page
+  const pages = await wpFetch<any[]>(
+    `/wp-json/wp/v2/pages?slug=home&_fields=acf`
+  );
+
+  const page = Array.isArray(pages) ? pages[0] : pages;
+  const url = (page?.acf?.hero_video_url || "").trim();
+
+  return url;
+}
+
+// ---- GALLERY (WordPress page ACF) ------------------------------------------
+
+export type GalleryItem = {
+  url: string;
+  alt: string;
+};
+
+export async function getGalleryImages(): Promise<GalleryItem[]> {
+  const pages = await wpFetch<any[]>(
+    `/wp-json/wp/v2/pages?slug=gallery&_fields=acf`
+  );
+
+  const page = Array.isArray(pages) ? pages[0] : pages;
+
+  // ACF "Gallery" field returns an array of images (shape depends on return format)
+  const items = page?.acf?.gallery_images || [];
+
+  // If return format is "Image URL"
+  if (items.length && typeof items[0] === "string") {
+    return items.map((url: string) => ({
+      url,
+      alt: "Gallery image",
+    }));
+  }
+
+  // If return format is "Image Array"
+  if (items.length && typeof items[0] === "object") {
+    return items.map((img: any) => ({
+      url: img?.url || img?.source_url || "",
+      alt: img?.alt || img?.title || "Gallery image",
+    })).filter((x: any) => x.url);
+  }
+
+  return [];
+}

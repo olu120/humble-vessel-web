@@ -15,17 +15,33 @@ export default function DonationPopup({ locale }: DonationPopupProps) {
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
-    // Don’t show if already dismissed
     if (typeof window === "undefined") return;
+
     const seen = window.localStorage.getItem(STORAGE_KEY);
     if (seen === "1") return;
 
-    const timer = setTimeout(() => {
-      setOpen(true);
-    }, 12000); // 12 seconds
-
-    return () => clearTimeout(timer);
+    const timer = window.setTimeout(() => setOpen(true), 12000);
+    return () => window.clearTimeout(timer);
   }, []);
+
+  // Lock body scroll + ESC to close
+  useEffect(() => {
+    if (!open) return;
+
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") close();
+    };
+    window.addEventListener("keydown", onKey);
+
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      window.removeEventListener("keydown", onKey);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   const close = () => {
     setOpen(false);
@@ -50,38 +66,47 @@ export default function DonationPopup({ locale }: DonationPopupProps) {
   const laterLabel = locale === "lg" ? "Ssi kaakano" : "Maybe later";
 
   return (
-    <div className="fixed inset-0 z-40 flex items-end justify-center px-4 pb-6 sm:items-center sm:px-0">
+    <div
+      className="fixed inset-0 z-[9999] flex items-end justify-center p-4 sm:items-center"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Donation reminder"
+      style={{
+        paddingBottom: "max(1rem, env(safe-area-inset-bottom))",
+        paddingTop: "max(1rem, env(safe-area-inset-top))",
+      }}
+      onMouseDown={(e) => {
+        // Click outside panel closes
+        if (e.target === e.currentTarget) close();
+      }}
+    >
       {/* Backdrop */}
-      <button
-        type="button"
-        className="absolute inset-0 h-full w-full bg-black/40"
-        onClick={close}
-        aria-label="Close donation reminder"
-      />
+      <div className="absolute inset-0 bg-black/50" aria-hidden="true" />
 
       {/* Panel */}
-      <div className="relative z-50 w-full max-w-md rounded-2xl bg-white p-5 shadow-xl ring-1 ring-black/5">
+      <div
+        className="relative z-10 w-full max-w-md p-5 bg-white shadow-2xl rounded-2xl ring-1 ring-black/5"
+        onMouseDown={(e) => e.stopPropagation()}
+      >
         <div className="flex items-start justify-between gap-3">
-          <div>
-            <h2 className="text-base font-semibold text-slate-900">
-              {title}
-            </h2>
+          <div className="min-w-0">
+            <h2 className="text-base font-semibold text-slate-900">{title}</h2>
             <p className="mt-2 text-sm text-slate-700">{body}</p>
           </div>
+
           <button
             type="button"
             onClick={close}
-            className="ml-2 inline-flex h-7 w-7 items-center justify-center rounded-full text-slate-500 hover:bg-slate-100 hover:text-slate-800"
+            className="inline-flex items-center justify-center rounded-full h-9 w-9 shrink-0 text-slate-500 hover:bg-slate-100 hover:text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40"
             aria-label="Close"
           >
             ×
           </button>
         </div>
 
-        <div className="mt-4 flex flex-wrap items-center gap-3">
-          {/* IMPORTANT: Button wrapped in Link instead of using href on Button */}
-          <Link href={`/${locale}/donate`} className="inline-block">
-            <Button type="button">
+        <div className="flex flex-col gap-3 mt-5 sm:flex-row sm:items-center sm:justify-start">
+          <Link href={`/${locale}/donate`} className="w-full sm:w-auto">
+            <Button type="button" className="w-full sm:w-auto">
               {donateLabel}
             </Button>
           </Link>
@@ -89,7 +114,7 @@ export default function DonationPopup({ locale }: DonationPopupProps) {
           <button
             type="button"
             onClick={close}
-            className="text-sm text-slate-500 underline-offset-2 hover:underline"
+            className="text-sm rounded-md text-slate-600 underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40"
           >
             {laterLabel}
           </button>

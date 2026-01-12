@@ -59,3 +59,18 @@
 @media (min-width: 1280px) {
   html { font-size: 18px; }
 }
+
+/* --- Mobile responsiveness helpers --- */
+html, body {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+button, a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Helps with modern viewport units */
+:root {
+  --vh: 1vh;
+}
